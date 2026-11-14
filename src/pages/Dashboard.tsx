@@ -106,6 +106,7 @@ export default function Dashboard() {
 
   // Drawer de Detalhe da Tarefa
   const [selectedTaskDetail, setSelectedTaskDetail] = useState<AtribuicaoRecord | null>(null)
+  const [lightboxFotoUrl, setLightboxFotoUrl] = useState<string | null>(null)
 
   // Animação pop tempo real (id do item que acabou de atualizar)
   const [recentUpdatedId, setRecentUpdatedId] = useState<string | null>(null)
@@ -1176,13 +1177,22 @@ export default function Dashboard() {
                   <span className="text-xs font-bold text-[#8A6F6F] block mb-2">
                     Foto de Evidência:
                   </span>
-                  <div className="rounded-2xl overflow-hidden border border-[#F2A65A]/30">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setLightboxFotoUrl(
+                        usersService.getFileUrl(selectedTaskDetail, selectedTaskDetail.foto),
+                      )
+                    }
+                    className="block w-full rounded-2xl overflow-hidden border border-[#F2A65A]/30 hover:scale-[1.01] transition cursor-zoom-in"
+                  >
                     <img
                       src={usersService.getFileUrl(selectedTaskDetail, selectedTaskDetail.foto)}
                       alt="Evidência da tarefa"
                       className="w-full max-h-72 object-cover"
                     />
-                  </div>
+                  </button>
+                  <p className="text-[10px] text-[#8A6F6F] mt-1">Clique na foto para ampliar.</p>
                 </div>
               )}
             </div>
@@ -1195,6 +1205,28 @@ export default function Dashboard() {
                 Fechar Detalhes
               </Button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= LIGHTBOX DA FOTO ================= */}
+      {lightboxFotoUrl && (
+        <div
+          onClick={() => setLightboxFotoUrl(null)}
+          className="fixed inset-0 z-60 bg-black/80 flex items-center justify-center p-4 backdrop-blur-xs cursor-pointer"
+        >
+          <div className="relative max-w-2xl max-h-[90vh] p-2 bg-white rounded-3xl overflow-hidden shadow-2xl">
+            <button
+              onClick={() => setLightboxFotoUrl(null)}
+              className="absolute top-4 right-4 p-2 rounded-full bg-black/60 text-white hover:bg-black transition cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <img
+              src={lightboxFotoUrl}
+              alt="Evidência ampliada"
+              className="w-full h-auto max-h-[85vh] object-contain rounded-2xl"
+            />
           </div>
         </div>
       )}

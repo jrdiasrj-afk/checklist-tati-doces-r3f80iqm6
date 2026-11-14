@@ -28,6 +28,13 @@ import {
 
 const TIPO_LIMITE_MENCIONA = (limite?: string) => (limite ? `Limite: ${limite.slice(0, 5)}` : '')
 
+/** Uma tarefa pede foto quando o gerente marcou registro 'foto' ou evidência obrigatória */
+const tarefaPedeFoto = (tarefa?: AtribuicaoRecord['expand']['tarefa']) =>
+  tarefa?.tipo_registro === 'foto' || !!tarefa?.evidencia_obrigatoria
+/** Foto obrigatória = pede foto E o gerente marcou evidencia_obrigatoria */
+const tarefaExigeFoto = (tarefa?: AtribuicaoRecord['expand']['tarefa']) =>
+  tarefaPedeFoto(tarefa) && !!tarefa?.evidencia_obrigatoria
+
 export default function Hoje() {
   const { user } = useAuth()
   const [atribuicoes, setAtribuicoes] = useState<AtribuicaoRecord[]>([])
@@ -276,6 +283,10 @@ function AtribuicaoItem({
   const tarefa = a.expand?.tarefa
   const processo = tarefa?.expand?.processo
   const critica = !!tarefa?.critica
+  const pedeFoto = tarefaPedeFoto(tarefa)
+  const fotoObrigatoria = tarefaExigeFoto(tarefa)
+  const fotoUrl = a.foto ? usersService.getFileUrl(a, a.foto) : null
+  const [lightboxFotoUrl, setLightboxFotoUrl] = useState<string | null>(null)
 
   return (
     <div
@@ -301,6 +312,18 @@ function AtribuicaoItem({
             {atrasada && (
               <span className="inline-flex items-center gap-1 text-[10px] font-bold text-white bg-[#E5484D] px-2 py-0.5 rounded-full">
                 <AlertCircle className="w-2.5 h-2.5" /> Atrasada
+              </span>
+            )}
+            {pedeFoto && !atrasada && (
+              <span
+                className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                  fotoObrigatoria
+                    ? 'text-[#E0447C] bg-[#FFF3E8] border-[#E0447C]/20'
+                    : 'text-[#2D7A51] bg-[#EDF8F1] border-[#2D7A51]/20'
+                }`}
+              >
+                <Camera className="w-2.5 h-2.5" />{' '}
+                {fotoObrigatoria ? 'Foto obrigatória' : 'Foto opcional'}
               </span>
             )}
           </div>
@@ -335,6 +358,18 @@ function AtribuicaoItem({
               N/A{a.observacao ? ` — ${a.observacao}` : ''}
             </p>
           )}
+          {fotoUrl && (
+            <button
+              type="button"
+              onClick={() => setLightboxFotoUrl(fotoUrl)}
+              className="mt-2 w-16 h-16 rounded-xl overflow-hidden border border-[#E0447C]/40 shrink-0 hover:scale-105 transition cursor-pointer"
+            >
+              <img src={fotoUrl} alt="Evidência" className="w-full h-full object-cover" />
+            </button>
+          )}
+          {!fotoUrl && pedeFoto && a.status === 'concluida' && (
+            <p className="text-[11px] text-[#8A6F6F] mt-1 italic">Concluída sem foto (opcional).</p>
+          )}
         </div>
 
         {!apenasLeitura && (
@@ -357,6 +392,27 @@ function AtribuicaoItem({
           </div>
         )}
       </div>
+
+      {lightboxFotoUrl && (
+        <div
+          onClick={() => setLightboxFotoUrl(null)}
+          className="fixed inset-0 z-60 bg-black/80 flex items-center justify-center p-4 backdrop-blur-xs cursor-pointer"
+        >
+          <div className="relative max-w-lg max-h-[85vh] p-2 bg-white rounded-3xl overflow-hidden shadow-2xl">
+            <button
+              onClick={() => setLightboxFotoUrl(null)}
+              className="absolute top-4 right-4 p-2 rounded-full bg-black/60 text-white hover:bg-black transition cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <img
+              src={lightboxFotoUrl}
+              alt="Evidência ampliada"
+              className="w-full h-auto max-h-[80vh] object-contain rounded-2xl"
+            />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -380,7 +436,8 @@ function ConcluirModal({
 }) {
   const tarefa = atribuicao.expand?.tarefa
   const tipo = tarefa?.tipo_registro || 'nenhum'
-  const exigeFoto = tipo === 'foto' || !!tarefa?.evidencia_obrigatoria
+  const fotoObrigatoria = tarefaExigeFoto(tarefa)
+  const pedeFoto = fotoObrigatoria || tarefaPedeFoto(tarefa)
   const exigeTexto = tipo === 'texto'
   const exigeMedicao = tipo === 'medicao'
 
@@ -411,7 +468,7 @@ function ConcluirModal({
       return
     }
 
-    if (exigeFoto && !fotoFile) {
+    if (fotoObrigatoria && !fotoFile) {
       setErro('Este item exige uma foto para ser concluído.')
       return
     }
@@ -492,11 +549,16 @@ function ConcluirModal({
             </div>
           )}
 
-          {exigeFoto && !modoNA && (
+          {pedeFoto && !modoNA && (
             <div className="space-y-1.5">
               <Label className="text-xs font-bold uppercase tracking-wider text-[#3B2B2B]">
-                Foto de Evidência *
+                Foto de Evidência {fotoObrigatoria ? '*' : ' (opcional)'}
               </Label>
+              {pedeFoto && !fotoObrigatoria && (
+                <p className="text-[11px] text-[#8A6F6F]">
+                  Foto incentivada — o item pode ser concluído sem ela.
+                </p>
+              )}
               {fotoPreview ? (
                 <div className="relative rounded-2xl overflow-hidden border border-[#F2A65A]/30">
                   <img src={fotoPreview} alt="Prévia" className="w-full h-40 object-cover" />
@@ -513,9 +575,12 @@ function ConcluirModal({
                 </div>
               ) : (
                 <label className="flex flex-col items-center justify-center gap-2 h-28 rounded-2xl border-2 border-dashed border-[#F2A65A]/40 bg-[#FFF9F2]/50 cursor-pointer hover:border-[#E0447C]/50 transition">
-                  <Upload className="w-5 h-5 text-[#E0447C]" />
+                  <div className="flex items-center gap-2">
+                    <Camera className="w-5 h-5 text-[#E0447C]" />
+                    <Upload className="w-5 h-5 text-[#E0447C]" />
+                  </div>
                   <span className="text-xs font-semibold text-[#8A6F6F]">
-                    Tirar ou escolher foto
+                    Tirar foto ou escolher da galeria
                   </span>
                   <input
                     type="file"

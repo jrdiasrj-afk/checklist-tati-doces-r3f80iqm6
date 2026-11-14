@@ -294,9 +294,14 @@ export default function Escala() {
                       {/* Tarefa */}
                       <td className="py-3.5 px-3">
                         <p className="font-semibold text-[#3B2B2B]">{tarefa?.titulo || 'Tarefa'}</p>
-                        {tarefa?.evidencia_obrigatoria && (
+                        {tarefa?.tipo_registro === 'foto' && tarefa?.evidencia_obrigatoria && (
                           <span className="text-[10px] text-[#E0447C] font-bold block mt-0.5">
                             * Exige foto
+                          </span>
+                        )}
+                        {tarefa?.tipo_registro === 'foto' && !tarefa?.evidencia_obrigatoria && (
+                          <span className="text-[10px] text-[#2D7A51] font-bold block mt-0.5">
+                            Foto opcional
                           </span>
                         )}
                       </td>

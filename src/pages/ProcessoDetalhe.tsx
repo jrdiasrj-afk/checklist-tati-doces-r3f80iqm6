@@ -3,6 +3,16 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { MainLayout } from '@/components/MainLayout'
 import { processosService } from '@/services/processos'
 import type { ProcessoRecord, TarefaRecord, AreaProcesso, TipoRegistro, UserRecord } from '@/types'
+
+/** Controle de foto por tarefa: mapeia para tipo_registro='foto' + evidencia_obrigatoria */
+type FotoEvidencia = 'obrigatoria' | 'opcional' | 'nenhuma'
+
+const fotoEvidenciaDaTarefa = (
+  t: Pick<TarefaRecord, 'tipo_registro' | 'evidencia_obrigatoria'>,
+): FotoEvidencia => {
+  if (t.tipo_registro !== 'foto' && !t.evidencia_obrigatoria) return 'nenhuma'
+  return t.evidencia_obrigatoria ? 'obrigatoria' : 'opcional'
+}
 import { AreaBadge } from '@/components/AreaBadge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -27,6 +37,7 @@ import {
   Camera,
   Ruler,
   Type,
+  Upload,
   Thermometer,
   Repeat,
   Zap,
@@ -48,7 +59,7 @@ export default function ProcessoDetalhe() {
   const [editingTask, setEditingTask] = useState<TarefaRecord | null>(null)
   const [titulo, setTitulo] = useState('')
   const [descricao, setDescricao] = useState('')
-  const [evidenciaObrigatoria, setEvidenciaObrigatoria] = useState(false)
+  const [fotoEvidencia, setFotoEvidencia] = useState<FotoEvidencia>('nenhuma')
   const [ativa, setAtiva] = useState(true)
   const [critica, setCritica] = useState(false)
   const [tipoRegistro, setTipoRegistro] = useState<TipoRegistro>('nenhum')
@@ -98,7 +109,7 @@ export default function ProcessoDetalhe() {
     setEditingTask(null)
     setTitulo('')
     setDescricao('')
-    setEvidenciaObrigatoria(false)
+    setFotoEvidencia('nenhuma')
     setAtiva(true)
     setCritica(false)
     setTipoRegistro('nenhum')
@@ -112,7 +123,7 @@ export default function ProcessoDetalhe() {
     setEditingTask(task)
     setTitulo(task.titulo)
     setDescricao(task.descricao || '')
-    setEvidenciaObrigatoria(task.evidencia_obrigatoria)
+    setFotoEvidencia(fotoEvidenciaDaTarefa(task))
     setAtiva(task.ativa)
     setCritica(!!task.critica)
     setTipoRegistro(task.tipo_registro || 'nenhum')
@@ -137,10 +148,11 @@ export default function ProcessoDetalhe() {
       const dadosTarefa = {
         titulo: titulo.trim(),
         descricao: descricao.trim(),
-        evidencia_obrigatoria: evidenciaObrigatoria || tipoRegistro === 'foto',
+        evidencia_obrigatoria: fotoEvidencia === 'obrigatoria',
         ativa,
         critica,
-        tipo_registro: (tipoRegistro === 'foto' ? 'foto' : tipoRegistro) as TipoRegistro,
+        // Foto opcional/obrigatória ocupa o tipo de registro 'foto' (select único)
+        tipo_registro: (fotoEvidencia !== 'nenhuma' ? 'foto' : tipoRegistro) as TipoRegistro,
         medicao_alvo:
           tipoRegistro === 'medicao' && medicaoAlvo !== '' ? Number(medicaoAlvo) : undefined,
         medicao_max:
@@ -367,9 +379,14 @@ export default function ProcessoDetalhe() {
                             <Zap className="w-3 h-3" /> Crítica
                           </span>
                         )}
-                        {task.evidencia_obrigatoria && (
+                        {task.tipo_registro === 'foto' && task.evidencia_obrigatoria && (
                           <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#E0447C] bg-[#FFF3E8] px-2 py-0.5 rounded-full border border-[#E0447C]/20">
                             <Camera className="w-3 h-3" /> Foto Obrigatória
+                          </span>
+                        )}
+                        {task.tipo_registro === 'foto' && !task.evidencia_obrigatoria && (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#2D7A51] bg-[#EDF8F1] px-2 py-0.5 rounded-full border border-[#2D7A51]/20">
+                            <Camera className="w-3 h-3" /> Foto opcional
                           </span>
                         )}
                         {task.tipo_registro === 'medicao' && (
@@ -518,11 +535,10 @@ export default function ProcessoDetalhe() {
                     Sem o registro exigido, o item não conta como concluído
                   </p>
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   {(
                     [
                       { v: 'nenhum', label: 'Nenhum', icon: CheckCircle },
-                      { v: 'foto', label: 'Foto', icon: Camera },
                       { v: 'medicao', label: 'Medição', icon: Thermometer },
                       { v: 'texto', label: 'Texto', icon: Type },
                     ] as const
@@ -582,6 +598,51 @@ export default function ProcessoDetalhe() {
                 {tipoRegistro === 'texto' && (
                   <p className="text-[11px] text-[#8A6F6F]">
                     O colaborador deverá escrever uma observação obrigatória ao concluir.
+                  </p>
+                )}
+              </div>
+
+              {/* Foto de evidência */}
+              <div className="p-3 rounded-xl bg-[#FFF9F2] border border-[#F2A65A]/20 space-y-3">
+                <div>
+                  <p className="text-xs font-bold text-[#3B2B2B] flex items-center gap-1.5">
+                    <Camera className="w-3.5 h-3.5 text-[#E0447C]" /> Foto de Evidência
+                  </p>
+                  <p className="text-[11px] text-[#8A6F6F]">
+                    O colaborador anexa a foto ao concluir (câmera ou galeria)
+                  </p>
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  {(
+                    [
+                      { v: 'obrigatoria', label: 'Obrigatória', icon: Camera },
+                      { v: 'opcional', label: 'Opcional', icon: Upload },
+                      { v: 'nenhuma', label: 'Sem foto', icon: X },
+                    ] as const
+                  ).map(({ v, label, icon: Icon }) => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => setFotoEvidencia(v)}
+                      className={`flex flex-col items-center gap-1 py-2.5 rounded-xl border text-[11px] font-bold transition cursor-pointer ${
+                        fotoEvidencia === v
+                          ? 'bg-[#E0447C] border-[#E0447C] text-white shadow-sm'
+                          : 'bg-white border-[#F2A65A]/30 text-[#8A6F6F] hover:border-[#E0447C]/50'
+                      }`}
+                    >
+                      <Icon className="w-4 h-4" />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {fotoEvidencia === 'obrigatoria' && (
+                  <p className="text-[11px] text-[#8A6F6F]">
+                    O item só poderá ser concluído com a foto anexada.
+                  </p>
+                )}
+                {fotoEvidencia === 'opcional' && (
+                  <p className="text-[11px] text-[#8A6F6F]">
+                    A foto é incentivada, mas o item pode ser concluído sem ela.
                   </p>
                 )}
               </div>
