@@ -15,6 +15,7 @@ import {
 import type { AtribuicaoRecord, UserRecord, AlertaRecord } from '@/types'
 import { VereditoBadge, VereditoDetalhe } from '@/components/VereditoFoto'
 import { LOCAIS, LOCAL_LABELS, localLabel, isLocalValue } from '@/lib/locais'
+import { SETORES } from '@/lib/setores'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -95,6 +96,7 @@ export default function Dashboard() {
   const [selectedColab, setSelectedColab] = useState<string>('todos')
   const [selectedArea, setSelectedArea] = useState<string>('todas')
   const [selectedLocal, setSelectedLocal] = useState<string>('todos')
+  const [selectedSetor, setSelectedSetor] = useState<string>('todos')
   const [statusFilter, setStatusFilter] = useState<string | null>(null)
 
   // Dados
@@ -187,6 +189,10 @@ export default function Dashboard() {
         const local = item.expand?.tarefa?.expand?.processo?.local
         if (local !== selectedLocal) return false
       }
+      // Filtro de setor (pelo setor do colaborador responsável)
+      if (selectedSetor !== 'todos') {
+        if ((item.expand?.colaborador?.setor || '') !== selectedSetor) return false
+      }
       // Filtro de área
       if (selectedArea !== 'todas') {
         const area = item.expand?.tarefa?.expand?.processo?.area
@@ -194,7 +200,7 @@ export default function Dashboard() {
       }
       return true
     })
-  }, [atribuicoes, statusFilter, selectedLocal, selectedArea])
+  }, [atribuicoes, statusFilter, selectedLocal, selectedSetor, selectedArea])
 
   // Atrasadas (datas anteriores) também respeitam local, colaborador e área
   const atrasadasFiltradas = useMemo(() => {
@@ -205,9 +211,12 @@ export default function Dashboard() {
       if (selectedArea !== 'todas') {
         if (item.expand?.tarefa?.expand?.processo?.area !== selectedArea) return false
       }
+      if (selectedSetor !== 'todos') {
+        if ((item.expand?.colaborador?.setor || '') !== selectedSetor) return false
+      }
       return true
     })
-  }, [atrasadasHistorico, selectedLocal, selectedArea])
+  }, [atrasadasHistorico, selectedLocal, selectedSetor, selectedArea])
 
   // KPIs — calculados sobre a lista JÁ FILTRADA (data + colaborador vem do servidor)
   const kpis = useMemo(() => {
@@ -343,6 +352,7 @@ export default function Dashboard() {
       .filter((c) => {
         if (selectedColab !== 'todos' && c.id !== selectedColab) return false
         if (selectedLocal !== 'todos' && c.local && c.local !== selectedLocal) return false
+        if (selectedSetor !== 'todos' && (c.setor || '') !== selectedSetor) return false
         return true
       })
       .map((c) => {
@@ -363,7 +373,7 @@ export default function Dashboard() {
       )
 
     return semAcesso
-  }, [filteredAtribuicoes, colaboradores, selectedColab, selectedLocal])
+  }, [filteredAtribuicoes, colaboradores, selectedColab, selectedLocal, selectedSetor])
 
   return (
     <MainLayout
@@ -400,6 +410,22 @@ export default function Dashboard() {
               {LOCAIS.map((l) => (
                 <SelectItem key={l} value={l}>
                   {LOCAL_LABELS[l]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="w-40">
+          <Select value={selectedSetor} onValueChange={setSelectedSetor}>
+            <SelectTrigger className="h-10 rounded-xl bg-[#FFF9F2]/50 border-[#F2A65A]/30 text-xs font-semibold">
+              <SelectValue placeholder="Setor" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos os setores</SelectItem>
+              {SETORES.map((s) => (
+                <SelectItem key={s} value={s}>
+                  {s}
                 </SelectItem>
               ))}
             </SelectContent>

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-14T22:27:16.920Z",
+  "generatedAt": "2026-11-14T23:52:21.480Z",
   "collections": [
     {
       "name": "users",
@@ -70,6 +70,22 @@
           "type": "text",
           "required": false,
           "system": false
+        },
+        {
+          "name": "setor",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": [
+            "Batida",
+            "Cozinha",
+            "Gerência",
+            "Produção",
+            "Estoque",
+            "Caixa",
+            "Salão/Atendimento",
+            "Recheios"
+          ]
         }
       ],
       "indexes": [

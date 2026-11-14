@@ -10,6 +10,7 @@ function linhasDoRelatorio(registros: AtribuicaoRecord[]) {
   return registros.map((r) => {
     const cleanDate = r.data.split('T')[0]
     const colabName = r.expand?.colaborador?.name || ''
+    const colabSetor = r.expand?.colaborador?.setor || ''
     const colabEmail = r.expand?.colaborador?.email || ''
     const procName = r.expand?.tarefa?.expand?.processo?.nome || ''
     const procArea = r.expand?.tarefa?.expand?.processo?.area || ''
@@ -32,6 +33,7 @@ function linhasDoRelatorio(registros: AtribuicaoRecord[]) {
     return [
       cleanDate.split('-').reverse().join('/'),
       colabName || colabEmail,
+      colabSetor,
       procName,
       procArea,
       taskTitle,
@@ -51,6 +53,7 @@ function linhasDoRelatorio(registros: AtribuicaoRecord[]) {
 const HEADERS_PDF = [
   'Data',
   'Colaborador',
+  'Setor',
   'Processo',
   'Área',
   'Tarefa',
@@ -108,10 +111,11 @@ export function exportarRelatorioPDF(
   )
 
   const body: RowInput[] = linhasDoRelatorio(registros).map((row) => {
-    const [data, colab, proc, area, tarefa, st, ...rest] = row
+    const [data, colab, setor, proc, area, tarefa, st, ...rest] = row
     const cell: CellDef[] = [
       { content: data },
       { content: colab },
+      { content: setor },
       { content: proc },
       { content: area },
       { content: tarefa },
@@ -130,7 +134,7 @@ export function exportarRelatorioPDF(
     headStyles: { fillColor: [224, 68, 124], textColor: 255, fontStyle: 'bold' },
     alternateRowStyles: { fillColor: [255, 249, 242] },
     columnStyles: {
-      12: { cellWidth: 140 },
+      13: { cellWidth: 140 },
     },
     didDrawPage: (data: HookData) => {
       const pageNum = doc.getNumberOfPages()

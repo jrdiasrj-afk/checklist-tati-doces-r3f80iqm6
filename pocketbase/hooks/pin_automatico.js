@@ -10,7 +10,8 @@ onRecordCreateRequest((e) => {
   const role = rec.getString('role', 'colaborador')
   const pin = rec.getString('pin', '')
 
-  if (role === 'colaborador' && !/^\d{4,6}$/.test(pin)) {
+  // Gerentes também ganham PIN automático (entrarão por PIN, como os demais).
+  if (!/^\d{4,6}$/.test(pin)) {
     const usados = new Set(
       $app.findRecordsByFilter('users', "pin != ''", '', 500, 0).map((u) => u.getString('pin', '')),
     )

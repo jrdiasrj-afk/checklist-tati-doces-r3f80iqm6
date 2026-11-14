@@ -8,6 +8,7 @@ interface ColaboradorPublico {
   id: string
   name: string
   local?: string
+  role?: 'gerente' | 'colaborador'
 }
 
 interface PinLoginProps {
@@ -229,6 +230,11 @@ export const PinLogin: React.FC<PinLoginProps> = ({ onVoltar, onSucesso }) => {
             >
               <span className="text-sm font-semibold text-[#3B2B2B] truncate">
                 {c.name || 'Sem nome'}
+                {c.role === 'gerente' && (
+                  <span className="ml-2 text-[10px] font-bold uppercase text-[#B77A0A] bg-[#FFF3D6] px-1.5 py-0.5 rounded-full align-middle">
+                    Gerente
+                  </span>
+                )}
               </span>
               <Fingerprint className="w-4 h-4 text-[#E0447C] shrink-0" />
             </button>

@@ -43,6 +43,7 @@ import {
   type Indicadores,
 } from '@/services/indicadores'
 import { exportarRelatorioPDF } from '@/services/pdf'
+import { SETORES } from '@/lib/setores'
 import {
   ResponsiveContainer,
   BarChart,
@@ -97,6 +98,7 @@ export default function Relatorios() {
   const [colaboradorId, setColaboradorId] = useState('todos')
   const [processoId, setProcessoId] = useState('todos')
   const [status, setStatus] = useState('todos')
+  const [setorFiltro, setSetorFiltro] = useState('todos')
 
   // Dados
   const [colaboradores, setColaboradores] = useState<UserRecord[]>([])
@@ -133,10 +135,13 @@ export default function Relatorios() {
       })
 
       // Filtro local adicional de processo (já que PocketBase filter em relação aninhada pode variar)
-      const filtered =
-        processoId === 'todos'
-          ? data
-          : data.filter((item) => item.expand?.tarefa?.processo === processoId)
+      const filtered = data
+        .filter((item) =>
+          processoId === 'todos' ? true : item.expand?.tarefa?.processo === processoId,
+        )
+        .filter((item) =>
+          setorFiltro === 'todos' ? true : (item.expand?.colaborador?.setor || '') === setorFiltro,
+        )
 
       setRegistros(filtered)
     } catch (err) {
@@ -148,7 +153,7 @@ export default function Relatorios() {
 
   useEffect(() => {
     loadData()
-  }, [dataInicio, dataFim, colaboradorId, processoId, status])
+  }, [dataInicio, dataFim, colaboradorId, processoId, status, setorFiltro])
 
   // Gráfico 1: Conclusões por Dia
   const chartPorDia = useMemo(() => {
@@ -219,7 +224,8 @@ export default function Relatorios() {
     return Array.from(map.values())
       .map(({ nome, itens }) => {
         const ind = calcularIndicadores(itens)
-        return { nome, ...ind, total: itens.length }
+        const setor = itens.find((it) => it.expand?.colaborador?.setor)?.expand?.colaborador?.setor
+        return { nome, setor: setor || '', ...ind, total: itens.length }
       })
       .sort((a, b) => b.score - a.score)
   }, [registros])
@@ -306,6 +312,7 @@ export default function Relatorios() {
     const headers = [
       'Data',
       'Colaborador',
+      'Setor',
       'Email',
       'Processo',
       'Area',
@@ -347,9 +354,11 @@ export default function Relatorios() {
           : ''
       const registroExigido = (r.expand?.tarefa as any)?.tipo_registro || 'nenhum'
 
+      const colabSetor = r.expand?.colaborador?.setor || ''
       return [
         `"${cleanDate}"`,
         `"${colabName}"`,
+        `"${colabSetor}"`,
         `"${colabEmail}"`,
         `"${procName}"`,
         `"${procArea}"`,
@@ -417,7 +426,7 @@ export default function Relatorios() {
           <Filter className="w-4 h-4 text-[#E0447C]" /> Filtros de Pesquisa
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
           <div>
             <Label className="text-[11px] font-bold text-[#3B2B2B]">Início</Label>
             <Input
@@ -436,6 +445,23 @@ export default function Relatorios() {
               onChange={(e) => setDataFim(e.target.value)}
               className="h-10 rounded-xl bg-[#FFF9F2]/60 border-[#F2A65A]/30 text-xs font-semibold"
             />
+          </div>
+
+          <div>
+            <Label className="text-[11px] font-bold text-[#3B2B2B]">Setor</Label>
+            <Select value={setorFiltro} onValueChange={setSetorFiltro}>
+              <SelectTrigger className="h-10 rounded-xl bg-[#FFF9F2]/60 border-[#F2A65A]/30 text-xs font-semibold">
+                <SelectValue placeholder="Setor" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos os setores</SelectItem>
+                {SETORES.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {s}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div>
@@ -729,6 +755,7 @@ export default function Relatorios() {
                   <tr className="border-b border-[#F2A65A]/20 text-[#8A6F6F] uppercase tracking-wider text-[10px]">
                     <th className="py-3 px-3">#</th>
                     <th className="py-3 px-3">Colaborador</th>
+                    <th className="py-3 px-3">Setor</th>
                     <th className="py-3 px-3 text-center">Itens</th>
                     <th className="py-3 px-3 text-center">Aplicação</th>
                     <th className="py-3 px-3 text-center">Pontualidade</th>
@@ -740,6 +767,7 @@ export default function Relatorios() {
                     <tr key={r.nome} className="hover:bg-[#FFF9F2]/50 transition">
                       <td className="py-3 px-3 font-bold text-[#E0447C]">{i + 1}º</td>
                       <td className="py-3 px-3 font-bold text-[#3B2B2B]">{r.nome}</td>
+                      <td className="py-3 px-3 text-[#8A6F6F]">{r.setor || '—'}</td>
                       <td className="py-3 px-3 text-center text-[#8A6F6F]">{r.total}</td>
                       <td className="py-3 px-3 text-center font-semibold text-[#2D7A51]">
                         {r.aplicacao}%
@@ -818,6 +846,9 @@ export default function Relatorios() {
                           <span className="font-bold text-[#3B2B2B]">
                             {colab?.name || colab?.email}
                           </span>
+                        </td>
+                        <td className="py-3 px-3 whitespace-nowrap text-[#8A6F6F]">
+                          {colab?.setor || '—'}
                         </td>
                         <td className="py-3 px-3 max-w-[200px]">
                           <p className="font-semibold text-[#3B2B2B] truncate">{tarefa?.titulo}</p>

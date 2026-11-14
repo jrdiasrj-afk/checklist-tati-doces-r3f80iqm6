@@ -4,6 +4,7 @@ import { usersService } from '@/services/users'
 import { atribuicoesService } from '@/services/atribuicoes'
 import type { UserRecord, UserRole } from '@/types'
 import { LOCAIS, LOCAL_LABELS, localLabel, type LocalValue } from '@/lib/locais'
+import { SETORES, type SetorValue } from '@/lib/setores'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
@@ -44,10 +45,14 @@ export default function Equipe() {
   const [editModal, setEditModal] = useState<{
     user: UserRecord
     local: string
+    setor: string
     supervisor: string
     pin: string
   } | null>(null)
   const [savingEdit, setSavingEdit] = useState(false)
+
+  // Filtro de setor na listagem
+  const [filtroSetor, setFiltroSetor] = useState<string>('todos')
 
   // Modal de novo colaborador
   const [novoModal, setNovoModal] = useState(false)
@@ -57,7 +62,8 @@ export default function Equipe() {
     password: string
     role: UserRole
     local: LocalValue | ''
-  }>({ name: '', email: '', password: '', role: 'colaborador', local: '' })
+    setor: SetorValue | ''
+  }>({ name: '', email: '', password: '', role: 'colaborador', local: '', setor: '' })
   const [savingNovo, setSavingNovo] = useState(false)
 
   const handleCriarColaborador = async () => {
@@ -69,10 +75,11 @@ export default function Equipe() {
         password: novoForm.password,
         role: novoForm.role,
         local: novoForm.local,
+        setor: novoForm.setor,
       })
       toast.success('Colaborador cadastrado com sucesso!')
       setNovoModal(false)
-      setNovoForm({ name: '', email: '', password: '', role: 'colaborador', local: '' })
+      setNovoForm({ name: '', email: '', password: '', role: 'colaborador', local: '', setor: '' })
       loadEquipe()
     } catch (err: any) {
       const field = err?.data?.data || {}
@@ -156,6 +163,7 @@ export default function Equipe() {
     setEditModal({
       user: colab,
       local: colab.local || '',
+      setor: colab.setor || 'none',
       supervisor: colab.supervisor || '',
       pin: colab.pin || '',
     })
@@ -179,6 +187,7 @@ export default function Equipe() {
       }
       const updated = await usersService.updateLocalSupervisor(editModal.user.id, {
         local: (editModal.local || '') as LocalValue | '',
+        setor: (editModal.setor === 'none' ? '' : editModal.setor) as SetorValue | '',
         supervisor: editModal.supervisor || '',
       })
       setUsers((prev) => prev.map((u) => (u.id === updated.id ? { ...updated, pin } : u)))
@@ -198,6 +207,13 @@ export default function Equipe() {
       setSavingEdit(false)
     }
   }
+
+  const usersFiltrados =
+    filtroSetor === 'todos'
+      ? users
+      : filtroSetor === '__sem__'
+        ? users.filter((u) => !u.setor)
+        : users.filter((u) => (u.setor || '') === filtroSetor)
 
   // Supervisores possíveis: gerentes do mesmo local do colaborador em edição
   const supervisoresPossiveis = editModal
@@ -237,6 +253,28 @@ export default function Equipe() {
             Gerencie local, supervisor e permissões; veja o desempenho operacional dos últimos 30
             dias de cada membro.
           </p>
+          <div className="mt-3 flex items-center gap-2">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-[#8A6F6F]">
+              Setor:
+            </span>
+            <Select value={filtroSetor} onValueChange={setFiltroSetor}>
+              <SelectTrigger className="h-8 w-48 rounded-full bg-[#FFF9F2]/60 border-[#F2A65A]/30 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos os setores</SelectItem>
+                {SETORES.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {s}
+                  </SelectItem>
+                ))}
+                <SelectItem value="__sem__">Sem setor</SelectItem>
+              </SelectContent>
+            </Select>
+            <span className="text-[11px] text-[#8A6F6F]">
+              {usersFiltrados.length} de {users.length}
+            </span>
+          </div>
         </div>
 
         {loading ? (
@@ -245,7 +283,7 @@ export default function Equipe() {
           </div>
         ) : (
           <div className="divide-y divide-[#F2A65A]/10">
-            {users.map((colab) => {
+            {usersFiltrados.map((colab) => {
               const isGerente = colab.role === 'gerente'
               const userStat = stats[colab.id] || { total: 0, concluidas: 0, taxa: 0 }
 
@@ -283,6 +321,11 @@ export default function Equipe() {
                             <MapPin className="w-2.5 h-2.5" /> {localLabel(colab.local)}
                           </span>
                         )}
+                        {colab.setor && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#EAF4FA] text-[#3B7A9C] border border-[#3B7A9C]/25">
+                            {colab.setor}
+                          </span>
+                        )}
                       </div>
                       <p className="text-xs text-[#8A6F6F] mt-0.5">{colab.email}</p>
                       <p className="text-[11px] text-[#8A6F6F] mt-0.5">
@@ -290,18 +333,16 @@ export default function Equipe() {
                           ? `Supervisor: ${nomeSupervisor(colab.supervisor)}`
                           : 'Sem supervisor definido'}
                       </p>
-                      {!isGerente && (
-                        <p className="text-[11px] mt-0.5 flex items-center gap-1">
-                          <KeyRound className="w-3 h-3 text-[#F2A65A]" />
-                          {colab.pin ? (
-                            <span className="font-bold tracking-[0.25em] text-[#3B2B2B]">
-                              PIN: {colab.pin}
-                            </span>
-                          ) : (
-                            <span className="text-[#8A6F6F] italic">Sem PIN definido</span>
-                          )}
-                        </p>
-                      )}
+                      <p className="text-[11px] mt-0.5 flex items-center gap-1">
+                        <KeyRound className="w-3 h-3 text-[#F2A65A]" />
+                        {colab.pin ? (
+                          <span className="font-bold tracking-[0.25em] text-[#3B2B2B]">
+                            PIN: {colab.pin}
+                          </span>
+                        ) : (
+                          <span className="text-[#8A6F6F] italic">Sem PIN definido</span>
+                        )}
+                      </p>
                     </div>
                   </div>
 
@@ -424,6 +465,29 @@ export default function Equipe() {
 
               <div className="space-y-1.5">
                 <Label className="text-xs font-bold uppercase tracking-wider text-[#3B2B2B]">
+                  Setor
+                </Label>
+                <Select
+                  value={novoForm.setor}
+                  onValueChange={(val) =>
+                    setNovoForm((f) => ({ ...f, setor: val as SetorValue | '' }))
+                  }
+                >
+                  <SelectTrigger className="h-11 rounded-xl bg-[#FFF9F2]/60 border-[#F2A65A]/30 focus-visible:ring-[#E0447C]">
+                    <SelectValue placeholder="Selecione o setor (opcional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {SETORES.map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {s}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold uppercase tracking-wider text-[#3B2B2B]">
                   Local
                 </Label>
                 <Select
@@ -533,6 +597,31 @@ export default function Equipe() {
 
               <div className="space-y-1.5">
                 <label className="text-xs font-bold uppercase tracking-wider text-[#3B2B2B]">
+                  Setor
+                </label>
+                <Select
+                  value={editModal.setor}
+                  onValueChange={(val) => setEditModal((m) => (m ? { ...m, setor: val } : m))}
+                >
+                  <SelectTrigger className="h-11 rounded-xl bg-[#FFF9F2]/60 border-[#F2A65A]/30 focus-visible:ring-[#E0447C]">
+                    <SelectValue placeholder="Selecione o setor (opcional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Sem setor</SelectItem>
+                    {SETORES.map((s) => (
+                      <SelectItem key={s} value={s}>
+                        {s}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-[#8A6F6F]">
+                  Setor de atuação do colaborador (Batida, Cozinha, Produção...).
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-[#3B2B2B]">
                   Supervisor
                 </label>
                 <Select
@@ -573,7 +662,7 @@ export default function Equipe() {
               </Button>
               <Button
                 size="sm"
-                disabled={savingEdit || !editModal.local}
+                disabled={savingEdit}
                 onClick={handleSaveEdit}
                 className="rounded-full bg-[#E0447C] hover:bg-[#C23066] text-white text-xs font-bold"
               >

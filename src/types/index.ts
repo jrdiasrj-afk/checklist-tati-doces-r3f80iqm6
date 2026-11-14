@@ -1,7 +1,8 @@
 export type UserRole = 'gerente' | 'colaborador'
 
 import type { LocalValue } from '@/lib/locais'
-export type { LocalValue }
+import type { SetorValue } from '@/lib/setores'
+export type { LocalValue, SetorValue }
 
 export interface UserRecord {
   id: string
@@ -11,6 +12,7 @@ export interface UserRecord {
   role: UserRole
   pin?: string
   local?: LocalValue | ''
+  setor?: SetorValue | ''
   supervisor?: string
   ultimo_acesso?: string
   created: string
