@@ -4,13 +4,19 @@ import { useAuth } from '@/contexts/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { InstallAppButton } from '@/components/InstallAppButton'
+import { PinLogin } from '@/components/PinLogin'
 import { toast } from 'sonner'
-import { Sparkles, ArrowRight, ShieldCheck, HeartHandshake, CheckCircle2 } from 'lucide-react'
+import { cn } from '@/lib/utils'
+import { ArrowRight, ShieldCheck, Sparkles, CheckCircle2, Fingerprint, Mail } from 'lucide-react'
+
+type AbaLogin = 'email' | 'pin'
 
 export default function Index() {
   const { isAuthenticated, user, login, isLoading } = useAuth()
   const navigate = useNavigate()
 
+  const [aba, setAba] = useState<AbaLogin>('email')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -57,16 +63,6 @@ export default function Index() {
     }
   }
 
-  const handleQuickLogin = (role: 'gerente' | 'colaborador') => {
-    if (role === 'gerente') {
-      setEmail('juniordias_rj@hotmail.com')
-      setPassword('Skip@Pass')
-    } else {
-      setEmail('maria@tatidoces.com.br')
-      setPassword('Skip@Pass')
-    }
-  }
-
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-[#FFF9F2]">
@@ -79,7 +75,6 @@ export default function Index() {
     <div className="min-h-screen bg-[#FFF9F2] flex flex-col lg:flex-row text-[#3B2B2B]">
       {/* Coluna Esquerda: Identidade da Marca (Desktop) */}
       <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-[#FFF3E8] via-[#FDF0F5] to-[#FFF9F2] p-12 flex-col justify-between border-r border-[#F2A65A]/20 relative overflow-hidden">
-        {/* Confeitos decorativos flutuantes */}
         <div className="absolute top-10 right-12 w-20 h-20 rounded-full bg-[#E0447C]/10 blur-xl pointer-events-none"></div>
         <div className="absolute bottom-16 left-10 w-32 h-32 rounded-full bg-[#F2A65A]/15 blur-2xl pointer-events-none"></div>
 
@@ -147,104 +142,134 @@ export default function Index() {
         </div>
 
         <div className="w-full max-w-[420px] bg-white rounded-3xl p-8 sm:p-10 shadow-[0_4px_24px_rgba(59,43,43,0.06)] border border-[#F2A65A]/20">
-          <div className="mb-6">
-            <h2 className="text-2xl font-display font-bold text-[#3B2B2B]">Acesse sua conta</h2>
-            <p className="text-sm text-[#8A6F6F] mt-1">
-              Informe seu e-mail e senha para começar o dia
-            </p>
+          {/* Abas: e-mail (gerente) / PIN (colaborador) */}
+          <div className="grid grid-cols-2 gap-2 p-1 rounded-full bg-[#FFF9F2] border border-[#F2A65A]/20 mb-6">
+            <button
+              type="button"
+              onClick={() => {
+                setAba('email')
+                setErrorMessage(null)
+              }}
+              className={cn(
+                'flex items-center justify-center gap-1.5 py-2.5 rounded-full text-xs font-bold transition cursor-pointer',
+                aba === 'email'
+                  ? 'bg-[#E0447C] text-white shadow-sm'
+                  : 'text-[#8A6F6F] hover:text-[#3B2B2B]',
+              )}
+            >
+              <Mail className="w-3.5 h-3.5" /> Gerente
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setAba('pin')
+                setErrorMessage(null)
+              }}
+              className={cn(
+                'flex items-center justify-center gap-1.5 py-2.5 rounded-full text-xs font-bold transition cursor-pointer',
+                aba === 'pin'
+                  ? 'bg-[#E0447C] text-white shadow-sm'
+                  : 'text-[#8A6F6F] hover:text-[#3B2B2B]',
+              )}
+            >
+              <Fingerprint className="w-3.5 h-3.5" /> Sou colaborador
+            </button>
           </div>
 
-          {errorMessage && (
-            <div className="mb-5 p-3.5 rounded-xl bg-[#E5484D]/10 border border-[#E5484D]/30 text-[#E5484D] text-sm font-medium flex items-center gap-2">
-              <span className="font-bold">Aviso:</span> {errorMessage}
-            </div>
-          )}
+          {aba === 'email' ? (
+            <>
+              <div className="mb-6">
+                <h2 className="text-2xl font-display font-bold text-[#3B2B2B]">Acesse sua conta</h2>
+                <p className="text-sm text-[#8A6F6F] mt-1">
+                  Informe seu e-mail e senha para começar o dia
+                </p>
+              </div>
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-1.5">
-              <Label
-                htmlFor="email"
-                className="text-xs font-bold uppercase tracking-wider text-[#3B2B2B]"
-              >
-                E-mail
-              </Label>
-              <Input
-                id="email"
-                type="email"
-                required
-                autoComplete="email"
-                placeholder="seu.email@tatidoces.com.br"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="h-12 rounded-xl bg-[#FFF9F2]/60 border-[#F2A65A]/30 focus-visible:ring-[#E0447C] text-base"
-              />
-            </div>
+              {errorMessage && (
+                <div className="mb-5 p-3.5 rounded-xl bg-[#E5484D]/10 border border-[#E5484D]/30 text-[#E5484D] text-sm font-medium flex items-center gap-2">
+                  <span className="font-bold">Aviso:</span> {errorMessage}
+                </div>
+              )}
 
-            <div className="space-y-1.5">
-              <div className="flex justify-between items-center">
-                <Label
-                  htmlFor="password"
-                  className="text-xs font-bold uppercase tracking-wider text-[#3B2B2B]"
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label
+                    htmlFor="email"
+                    className="text-xs font-bold uppercase tracking-wider text-[#3B2B2B]"
+                  >
+                    E-mail
+                  </Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    required
+                    autoComplete="email"
+                    placeholder="seu.email@tatidoces.com.br"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="h-12 rounded-xl bg-[#FFF9F2]/60 border-[#F2A65A]/30 focus-visible:ring-[#E0447C] text-base"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center">
+                    <Label
+                      htmlFor="password"
+                      className="text-xs font-bold uppercase tracking-wider text-[#3B2B2B]"
+                    >
+                      Senha
+                    </Label>
+                    <Link
+                      to="/esqueci-senha"
+                      className="text-xs font-semibold text-[#E0447C] hover:underline"
+                    >
+                      Esqueci minha senha
+                    </Link>
+                  </div>
+                  <Input
+                    id="password"
+                    type="password"
+                    required
+                    autoComplete="current-password"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="h-12 rounded-xl bg-[#FFF9F2]/60 border-[#F2A65A]/30 focus-visible:ring-[#E0447C] text-base"
+                  />
+                </div>
+
+                <Button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="w-full h-12 rounded-full bg-[#E0447C] hover:bg-[#C23066] text-white font-bold text-base shadow-md transition-all mt-2 cursor-pointer"
                 >
-                  Senha
-                </Label>
-                <Link
-                  to="/esqueci-senha"
-                  className="text-xs font-semibold text-[#E0447C] hover:underline"
-                >
-                  Esqueci minha senha
+                  {isSubmitting ? 'Entrando...' : 'Entrar no Tati Check'}
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </Button>
+              </form>
+
+              <div className="mt-6 text-center text-sm text-[#8A6F6F]">
+                Não tem uma conta ainda?{' '}
+                <Link to="/cadastro" className="font-bold text-[#E0447C] hover:underline">
+                  Criar conta
                 </Link>
               </div>
-              <Input
-                id="password"
-                type="password"
-                required
-                autoComplete="current-password"
-                placeholder="••••••••"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="h-12 rounded-xl bg-[#FFF9F2]/60 border-[#F2A65A]/30 focus-visible:ring-[#E0447C] text-base"
-              />
-            </div>
+            </>
+          ) : (
+            <PinLogin
+              onVoltar={() => setAba('email')}
+              onSucesso={(nome) => {
+                toast.success(`Bem-vindo(a), ${nome}! 🧁`)
+                navigate('/hoje')
+              }}
+            />
+          )}
+        </div>
 
-            <Button
-              type="submit"
-              disabled={isSubmitting}
-              className="w-full h-12 rounded-full bg-[#E0447C] hover:bg-[#C23066] text-white font-bold text-base shadow-md transition-all mt-2 cursor-pointer"
-            >
-              {isSubmitting ? 'Entrando...' : 'Entrar no Tati Check'}
-              <ArrowRight className="w-4 h-4 ml-2" />
-            </Button>
-          </form>
-
-          {/* Atalhos Rápidos para Demonstração */}
-          <div className="mt-6 pt-6 border-t border-[#3B2B2B]/10">
-            <p className="text-xs text-center text-[#8A6F6F] font-semibold mb-3 uppercase tracking-wider">
-              Acesso rápido para demonstração:
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('gerente')}
-                className="text-xs py-2 px-3 rounded-xl border border-[#E0447C]/40 bg-[#FFF3E8] hover:bg-[#FFE8D6] text-[#3B2B2B] font-semibold transition text-center cursor-pointer"
-              >
-                👔 Gerente (Junior)
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickLogin('colaborador')}
-                className="text-xs py-2 px-3 rounded-xl border border-[#F2A65A]/40 bg-[#FFF9F2] hover:bg-[#FFF0E0] text-[#3B2B2B] font-semibold transition text-center cursor-pointer"
-              >
-                👩‍🍳 Colaboradora (Maria)
-              </button>
-            </div>
-          </div>
-
-          <div className="mt-6 text-center text-sm text-[#8A6F6F]">
-            Não tem uma conta ainda?{' '}
-            <Link to="/cadastro" className="font-bold text-[#E0447C] hover:underline">
-              Criar conta
-            </Link>
+        {/* Instalação PWA — fora do card, discreto, no rodapé da coluna */}
+        <div className="mt-6 w-full max-w-[420px] flex justify-center">
+          <div className="w-full max-w-[300px]">
+            <InstallAppButton />
           </div>
         </div>
       </div>

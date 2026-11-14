@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-14T20:20:00.669Z",
+  "generatedAt": "2026-11-14T20:44:17.877Z",
   "collections": [
     {
       "name": "users",
@@ -62,6 +62,12 @@
         {
           "name": "ultimo_acesso",
           "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "pin",
+          "type": "text",
           "required": false,
           "system": false
         }

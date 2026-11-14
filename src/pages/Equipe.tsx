@@ -16,7 +16,15 @@ import {
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { ShieldCheck, UserCheck, AlertTriangle, MapPin, Pencil, UserPlus } from 'lucide-react'
+import {
+  ShieldCheck,
+  UserCheck,
+  AlertTriangle,
+  MapPin,
+  Pencil,
+  UserPlus,
+  KeyRound,
+} from 'lucide-react'
 
 export default function Equipe() {
   const [users, setUsers] = useState<UserRecord[]>([])
@@ -32,11 +40,12 @@ export default function Equipe() {
   } | null>(null)
   const [changing, setChanging] = useState(false)
 
-  // Modal de edição de local/supervisor
+  // Modal de edição de local/supervisor/PIN
   const [editModal, setEditModal] = useState<{
     user: UserRecord
     local: string
     supervisor: string
+    pin: string
   } | null>(null)
   const [savingEdit, setSavingEdit] = useState(false)
 
@@ -148,23 +157,43 @@ export default function Equipe() {
       user: colab,
       local: colab.local || '',
       supervisor: colab.supervisor || '',
+      pin: colab.pin || '',
     })
   }
 
   const handleSaveEdit = async () => {
     if (!editModal) return
+
+    const pin = editModal.pin.trim()
+    if (pin && !/^\d{4,6}$/.test(pin)) {
+      toast.error('O PIN deve ter de 4 a 6 dígitos numéricos.')
+      return
+    }
+
     setSavingEdit(true)
     try {
+      // Se o PIN mudou, salva junto (um só fluxo para o gerente)
+      const pinMudou = pin !== (editModal.user.pin || '')
+      if (pinMudou) {
+        await usersService.updatePin(editModal.user.id, pin)
+      }
       const updated = await usersService.updateLocalSupervisor(editModal.user.id, {
         local: (editModal.local || '') as LocalValue | '',
         supervisor: editModal.supervisor || '',
       })
-      setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)))
-      toast.success('Dados do colaborador atualizados!')
+      setUsers((prev) => prev.map((u) => (u.id === updated.id ? { ...updated, pin } : u)))
+      toast.success(
+        pinMudou
+          ? 'Dados atualizados! O novo PIN já vale para o login do colaborador.'
+          : 'Dados do colaborador atualizados!',
+      )
       setEditModal(null)
       loadEquipe()
     } catch (err: any) {
-      toast.error(err?.data?.message || err?.message || 'Não foi possível salvar os dados.')
+      const msgField = err?.data?.data?.pin?.message
+      toast.error(
+        msgField || err?.data?.message || err?.message || 'Não foi possível salvar os dados.',
+      )
     } finally {
       setSavingEdit(false)
     }
@@ -261,6 +290,18 @@ export default function Equipe() {
                           ? `Supervisor: ${nomeSupervisor(colab.supervisor)}`
                           : 'Sem supervisor definido'}
                       </p>
+                      {!isGerente && (
+                        <p className="text-[11px] mt-0.5 flex items-center gap-1">
+                          <KeyRound className="w-3 h-3 text-[#F2A65A]" />
+                          {colab.pin ? (
+                            <span className="font-bold tracking-[0.25em] text-[#3B2B2B]">
+                              PIN: {colab.pin}
+                            </span>
+                          ) : (
+                            <span className="text-[#8A6F6F] italic">Sem PIN definido</span>
+                          )}
+                        </p>
+                      )}
                     </div>
                   </div>
 
@@ -467,6 +508,27 @@ export default function Equipe() {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-[#3B2B2B]">
+                  PIN de acesso
+                </label>
+                <Input
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={editModal.pin}
+                  onChange={(e) =>
+                    setEditModal((m) =>
+                      m ? { ...m, pin: e.target.value.replace(/\D/g, '').slice(0, 6) } : m,
+                    )
+                  }
+                  placeholder="4 a 6 dígitos"
+                  className="h-11 rounded-xl bg-[#FFF9F2]/60 border-[#F2A65A]/30 focus-visible:ring-[#E0447C] tracking-[0.4em] text-center font-bold"
+                />
+                <p className="text-[11px] text-[#8A6F6F]">
+                  É com este PIN que o colaborador entra no app, na aba "Sou colaborador".
+                </p>
               </div>
 
               <div className="space-y-1.5">

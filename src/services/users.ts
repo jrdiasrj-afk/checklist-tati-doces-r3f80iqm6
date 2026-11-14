@@ -35,6 +35,11 @@ export const usersService = {
     return pb.collection<UserRecord>('users').update(id, { role })
   },
 
+  /** Gerente define o PIN de acesso do colaborador (4–6 dígitos numéricos) */
+  async updatePin(id: string, pin: string) {
+    return pb.collection<UserRecord>('users').update(id, { pin: pin.trim() })
+  },
+
   /** Gerente define local e supervisor de um usuário */
   async updateLocalSupervisor(
     id: string,

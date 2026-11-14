@@ -9,7 +9,8 @@ export interface UserRecord {
   name?: string
   avatar?: string
   role: UserRole
-  local?: LocalValue
+  pin?: string
+  local?: LocalValue | ''
   supervisor?: string
   ultimo_acesso?: string
   created: string
