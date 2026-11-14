@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { usersService } from '@/services/users'
+import { LogoTati } from '@/components/LogoTati'
 
 export const MainLayout: React.FC<{
   children: React.ReactNode
@@ -65,18 +66,11 @@ export const MainLayout: React.FC<{
       {isGerente && (
         <aside className="hidden lg:flex flex-col w-[210px] fixed inset-y-0 left-0 bg-white border-r border-[#F2A65A]/20 z-30 shadow-[2px_0_12px_rgba(59,43,43,0.03)]">
           {/* Logo Header */}
-          <div className="p-5 flex items-center gap-3 border-b border-[#F2A65A]/15">
-            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#E0447C] to-[#F2A65A] flex items-center justify-center text-white text-xl font-bold shadow-sm">
-              🧁
-            </div>
-            <div>
-              <span className="font-display font-extrabold text-xl text-[#E0447C] tracking-tight block leading-none">
-                Tati Check
-              </span>
-              <span className="text-[10px] font-bold text-[#8A6F6F] tracking-wider uppercase mt-1 block">
-                Painel Gerencial
-              </span>
-            </div>
+          <div className="p-5 flex flex-col items-start gap-3 border-b border-[#F2A65A]/15">
+            <LogoTati variant="wordmark" className="h-11 w-auto" />
+            <span className="text-[10px] font-bold text-[#8A6F6F] tracking-wider uppercase">
+              Painel Gerencial · Tati Check
+            </span>
           </div>
 
           {/* Navegação */}
@@ -145,9 +139,7 @@ export const MainLayout: React.FC<{
                 <p className="text-xs text-[#8A6F6F] font-medium leading-none">
                   Olá, {user?.name ? user.name.split(' ')[0] : 'Colaborador'} ☕
                 </p>
-                <h1 className="text-base font-display font-extrabold text-[#E0447C] leading-tight">
-                  Tati Check
-                </h1>
+                <LogoTati variant="wordmark" className="h-4 w-auto mt-0.5" />
               </div>
             </div>
 

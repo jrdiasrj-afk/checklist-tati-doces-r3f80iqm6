@@ -4,20 +4,20 @@
   "description": "Sistema de checklist e gestão de processos para a Tati Doces",
   "icons": [
     {
-      "src": "https://img.usecurling.com/p/192/192?q=cupcake&color=pink",
-      "type": "image/png",
+      "src": "/icons/icon-192.svg",
+      "type": "image/svg+xml",
       "sizes": "192x192",
       "purpose": "any"
     },
     {
-      "src": "https://img.usecurling.com/p/512/512?q=cupcake&color=pink",
-      "type": "image/png",
+      "src": "/icons/icon-512.svg",
+      "type": "image/svg+xml",
       "sizes": "512x512",
       "purpose": "any"
     },
     {
-      "src": "https://img.usecurling.com/p/512/512?q=cupcake&color=pink",
-      "type": "image/png",
+      "src": "/icons/icon-maskable.svg",
+      "type": "image/svg+xml",
       "sizes": "512x512",
       "purpose": "maskable"
     }
@@ -25,7 +25,7 @@
   "start_url": "/hoje",
   "scope": "/",
   "background_color": "#FFF9F2",
-  "theme_color": "#E0447C",
+  "theme_color": "#00A651",
   "display": "standalone",
   "orientation": "portrait"
 }

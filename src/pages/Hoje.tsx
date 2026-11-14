@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { MainLayout } from '@/components/MainLayout'
 import { AreaBadge } from '@/components/AreaBadge'
 import { useAuth } from '@/contexts/AuthContext'
@@ -35,31 +35,38 @@ export default function Hoje() {
   const [data, setData] = useState(() => new Date().toISOString().split('T')[0])
   const [modalAberto, setModalAberto] = useState<AtribuicaoRecord | null>(null)
 
+  const userId = user?.id ?? null
+
   const loadData = useCallback(async () => {
-    if (!user) return
+    if (!userId) return
     setLoading(true)
     try {
-      const items = await atribuicoesService.listByDate(data, user.id)
+      const items = await atribuicoesService.listByDate(data, userId)
       setAtribuicoes(items)
     } catch (err) {
       toast.error('Erro ao carregar suas tarefas de hoje.')
     } finally {
       setLoading(false)
     }
-  }, [data, user])
+  }, [data, userId])
 
   useEffect(() => {
     loadData()
   }, [loadData])
 
   // Registra evidência de acesso (users.ultimo_acesso) para a seção
-  // "Não estão acessando" da dashboard — fire-and-forget, sem quebrar a tela.
+  // "Não estão acessando" da dashboard — UMA vez por sessão na tela
+  // (fire-and-forget: falha de permissão não deve impactar a tela).
+  // Era isso que derrubava a tela: dependia do objeto `user`, que muda de
+  // identidade a cada evento do authStore, refazendo o PATCH em loop.
+  const touchFeito = useRef(false)
   useEffect(() => {
-    if (!user) return
-    usersService.touchUltimoAcesso(user.id).catch(() => {
-      /* silencioso: falha de permissão não deve impactar a tela */
+    if (!userId || touchFeito.current) return
+    touchFeito.current = true
+    usersService.touchUltimoAcesso(userId).catch(() => {
+      /* silencioso */
     })
-  }, [user])
+  }, [userId])
 
   // Tempo real
   useRealtime('atribuicoes', loadData)

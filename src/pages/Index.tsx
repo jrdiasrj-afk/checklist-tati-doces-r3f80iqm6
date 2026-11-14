@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { InstallAppButton } from '@/components/InstallAppButton'
 import { PinLogin } from '@/components/PinLogin'
+import { LogoTati } from '@/components/LogoTati'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { ArrowRight, ShieldCheck, Sparkles, CheckCircle2, Fingerprint, Mail } from 'lucide-react'
@@ -79,18 +80,16 @@ export default function Index() {
         <div className="absolute bottom-16 left-10 w-32 h-32 rounded-full bg-[#F2A65A]/15 blur-2xl pointer-events-none"></div>
 
         <div>
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#E0447C] to-[#F2A65A] flex items-center justify-center text-white shadow-md text-2xl font-bold font-display">
-              🧁
-            </div>
-            <div>
-              <h1 className="text-3xl font-display font-extrabold tracking-tight text-[#E0447C]">
-                Tati Check
-              </h1>
-              <p className="text-xs uppercase tracking-widest font-semibold text-[#8A6F6F]">
-                Tati Doces Confeitaria
-              </p>
-            </div>
+          <div className="flex items-center gap-4">
+            <LogoTati variant="completo" className="h-24 w-auto" />
+          </div>
+          <div className="mt-3">
+            <h1 className="text-3xl font-display font-extrabold tracking-tight text-[#E0447C]">
+              Tati Check
+            </h1>
+            <p className="text-xs uppercase tracking-widest font-semibold text-[#8A6F6F]">
+              Checklist e Rotina Operacional
+            </p>
           </div>
 
           <div className="mt-16 max-w-md">
@@ -134,11 +133,9 @@ export default function Index() {
       <div className="flex-1 flex flex-col justify-center items-center p-6 sm:p-12 lg:p-16">
         {/* Topo Mobile */}
         <div className="lg:hidden flex flex-col items-center mb-8 text-center">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-[#E0447C] to-[#F2A65A] flex items-center justify-center text-white shadow-md text-3xl font-bold font-display mb-3">
-            🧁
-          </div>
-          <h1 className="text-3xl font-display font-extrabold text-[#E0447C]">Tati Check</h1>
-          <p className="text-sm text-[#8A6F6F] mt-1">Confeitaria Tati Doces</p>
+          <LogoTati variant="completo" className="h-28 w-auto" />
+          <h1 className="text-2xl font-display font-extrabold text-[#E0447C] mt-3">Tati Check</h1>
+          <p className="text-sm text-[#8A6F6F] mt-1">Checklist e Rotina Operacional</p>
         </div>
 
         <div className="w-full max-w-[420px] bg-white rounded-3xl p-8 sm:p-10 shadow-[0_4px_24px_rgba(59,43,43,0.06)] border border-[#F2A65A]/20">

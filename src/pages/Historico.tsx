@@ -37,9 +37,14 @@ export default function Historico() {
     }
   }
 
+  // Dependemos apenas da IDENTIDADE do usuário (user?.id) — o objeto `user`
+  // mudava de referência a cada evento do authStore e refazia o fetch em loop.
+  const userId = user?.id
   useEffect(() => {
+    if (!userId) return
     loadHistorico()
-  }, [user, diasFiltro])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId, diasFiltro])
 
   // Agrupamento por dia
   const groupedByDay = React.useMemo(() => {

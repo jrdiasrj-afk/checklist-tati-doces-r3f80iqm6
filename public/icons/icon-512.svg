@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#00A651"/>
+  <g fill="#FFFFFF">
+    <!-- T -->
+    <path d="M96 148 q-20 0 -24 18 q-3 14 8 24 q-8 8 -4 20 q4 14 20 14 l14 0 q-6 52 10 66 q16 14 34 2 q14 -10 10 -30 l-10 -40 q28 -6 54 -6 q12 0 10 -16 q-2 -16 -20 -16 q-46 0 -82 4 q-6 -40 -20 -40 z"/>
+    <!-- A -->
+    <path d="M212 168 q-16 2 -16 18 q0 12 12 18 q-10 46 -2 68 q8 24 30 22 q20 -2 26 -22 q4 -16 2 -40 q22 -4 40 -4 q14 0 12 -16 q-2 -14 -18 -14 q-44 2 -86 -30 z M216 208 q20 8 42 8 q-2 24 -8 36 q-6 12 -14 6 q-8 -8 -6 -34 q0 -8 -14 -16 z"/>
+    <!-- T -->
+    <path d="M318 152 q-18 2 -18 20 q0 16 18 18 q22 2 44 0 l-8 44 q-6 40 6 56 q12 16 32 8 q16 -8 12 -28 l-14 -82 q34 -2 60 -2 q16 0 14 -18 q-2 -18 -22 -18 q-62 0 -124 2 z"/>
+    <!-- i (bolinha + haste) -->
+    <circle cx="424" cy="112" r="30"/>
+    <path d="M404 178 q-14 2 -14 18 q0 14 14 16 q-4 44 2 62 q6 20 24 20 q18 0 22 -20 q4 -18 -2 -50 q34 4 58 4 q14 0 14 -16 q0 -18 -20 -20 q-50 -4 -98 -14 z"/>
+    <text x="256" y="440" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="52" font-weight="bold" letter-spacing="6">DOCES E SALGADOS</text>
+  </g>
+</svg>

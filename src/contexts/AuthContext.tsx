@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react'
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react'
 import pb from '@/lib/pocketbase/client'
 import type { UserRecord, UserRole } from '@/types'
 
@@ -14,24 +14,46 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
+const mapearUsuario = (rec: any): UserRecord => ({
+  id: rec.id,
+  email: rec.email || '',
+  name: rec.name || '',
+  avatar: rec.avatar || '',
+  role: (rec.role as UserRole) || 'colaborador',
+  created: rec.created,
+  updated: rec.updated,
+})
+
+const mesmoUsuario = (a: UserRecord | null, b: UserRecord | null) =>
+  a === b ||
+  (a !== null &&
+    b !== null &&
+    a.id === b.id &&
+    a.name === b.name &&
+    a.email === b.email &&
+    a.avatar === b.avatar &&
+    a.role === b.role)
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserRecord | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const userRef = useRef<UserRecord | null>(null)
+
+  // Só propaga mudança de identidade real para a árvore React. O authStore
+  // emite eventos com NOVO objeto a cada chamada (save/clear/refresh) —
+  // propagar sempre re-renderizava telas cujos efeitos dependem de `user`
+  // (Hoje/Histórico) e refazia fetch + PATCH em loop até a API limitar (429).
+  const setUserSeMudou = (proximo: UserRecord | null) => {
+    if (mesmoUsuario(userRef.current, proximo)) return
+    userRef.current = proximo
+    setUser(proximo)
+  }
 
   const syncUserFromAuthStore = () => {
     if (pb.authStore.isValid && pb.authStore.record) {
-      const rec = pb.authStore.record
-      setUser({
-        id: rec.id,
-        email: rec.email || '',
-        name: rec.name || '',
-        avatar: rec.avatar || '',
-        role: (rec.role as UserRole) || 'colaborador',
-        created: rec.created,
-        updated: rec.updated,
-      })
+      setUserSeMudou(mapearUsuario(pb.authStore.record))
     } else {
-      setUser(null)
+      setUserSeMudou(null)
     }
     setIsLoading(false)
   }
@@ -48,17 +70,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const login = async (email: string, pass: string) => {
     const authData = await pb.collection('users').authWithPassword(email, pass)
-    const rec = authData.record
-    const mapped: UserRecord = {
-      id: rec.id,
-      email: rec.email || '',
-      name: rec.name || '',
-      avatar: rec.avatar || '',
-      role: (rec.role as UserRole) || 'colaborador',
-      created: rec.created,
-      updated: rec.updated,
-    }
-    setUser(mapped)
+    const mapped = mapearUsuario(authData.record)
+    setUserSeMudou(mapped)
     return mapped
   }
 
@@ -71,15 +84,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (pb.authStore.isValid && pb.authStore.record) {
       try {
         const fresh = await pb.collection('users').getOne(pb.authStore.record.id)
-        setUser({
-          id: fresh.id,
-          email: fresh.email || '',
-          name: fresh.name || '',
-          avatar: fresh.avatar || '',
-          role: (fresh.role as UserRole) || 'colaborador',
-          created: fresh.created,
-          updated: fresh.updated,
-        })
+        setUserSeMudou(mapearUsuario(fresh))
       } catch (_) {
         // ignore
       }
