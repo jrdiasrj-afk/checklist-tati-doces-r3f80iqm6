@@ -21,4 +21,6 @@ onRecordCreateRequest((e) => {
     }
     if (novo) rec.set('pin', novo)
   }
+
+  e.next()
 }, 'users')

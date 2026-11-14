@@ -5,15 +5,8 @@
 //   - Assets estáticos (_app/, ícones, manifest): stale-while-revalidate.
 //   - API do PocketBase: sempre rede (dados de checklist nunca vêm de cache).
 //
-const CACHE_NAME = 'tati-check-v2'
-const APP_SHELL = [
-  '/',
-  '/index.html',
-  '/offline.html',
-  '/manifest.json',
-  '/icon-192.png',
-  '/icon-512.png',
-]
+const CACHE_NAME = 'tati-check-v3'
+const APP_SHELL = ['/', '/index.html', '/offline.html', '/manifest.json']
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL).catch(() => {})))

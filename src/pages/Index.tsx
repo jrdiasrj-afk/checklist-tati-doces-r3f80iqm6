@@ -249,10 +249,8 @@ export default function Index() {
               </form>
 
               <div className="mt-6 text-center text-sm text-[#8A6F6F]">
-                Não tem uma conta ainda?{' '}
-                <Link to="/cadastro" className="font-bold text-[#E0447C] hover:underline">
-                  Criar conta
-                </Link>
+                Contas de colaboradores são criadas pelo gerente na tela{' '}
+                <span className="font-semibold text-[#3B2B2B]">Equipe</span>.
               </div>
             </>
           ) : (

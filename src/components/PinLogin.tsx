@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { RecordModel } from 'pocketbase'
 import { ArrowLeft, Delete, Fingerprint, Loader2 } from 'lucide-react'
 import pb from '@/lib/pocketbase/client'
 import { cn } from '@/lib/utils'
@@ -69,14 +70,17 @@ export const PinLogin: React.FC<PinLoginProps> = ({ onVoltar, onSucesso }) => {
       }
 
       // Sessão oficial do PocketBase — mesma mecânica do login por senha.
-      pb.authStore.save(res.token, {
+      const rec: RecordModel = {
         id: res.record.id,
         name: res.record.name,
         email: res.record.email,
         avatar: res.record.avatar,
         role: res.record.role,
+        local: res.record.local,
         collectionName: 'users',
-      })
+        collectionId: '_pb_users_auth_',
+      }
+      pb.authStore.save(res.token, rec)
       onSucesso(res.record.name || 'Colaborador')
     } catch (err: any) {
       const msg =

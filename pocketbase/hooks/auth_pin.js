@@ -69,13 +69,9 @@ routerAdd('POST', '/backend/v1/auth/pin', (e) => {
 // Devolve APENAS id/nome/local — nunca PIN, e-mail ou qualquer dado sensível.
 //
 routerAdd('GET', '/backend/v1/auth/colaboradores', (e) => {
-  const users = $app.findRecordsByFilter(
-    'users',
-    "role = 'colaborador' && verified = true",
-    'name',
-    500,
-    0,
-  )
+  // Colaboradores criados pelo gerente NÃO são verificados por e-mail —
+  // por isso NÃO filtramos por `verified` aqui (a lista viria vazia).
+  const users = $app.findRecordsByFilter('users', "role = 'colaborador'", 'name', 500, 0)
 
   const colaboradores = users.map((u) => ({
     id: u.id,

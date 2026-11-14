@@ -4,19 +4,19 @@
   "description": "Sistema de checklist e gestão de processos para a Tati Doces",
   "icons": [
     {
-      "src": "/icon-192.png",
+      "src": "https://img.usecurling.com/p/192/192?q=cupcake&color=pink",
       "type": "image/png",
       "sizes": "192x192",
       "purpose": "any"
     },
     {
-      "src": "/icon-512.png",
+      "src": "https://img.usecurling.com/p/512/512?q=cupcake&color=pink",
       "type": "image/png",
       "sizes": "512x512",
       "purpose": "any"
     },
     {
-      "src": "/icon-512.png",
+      "src": "https://img.usecurling.com/p/512/512?q=cupcake&color=pink",
       "type": "image/png",
       "sizes": "512x512",
       "purpose": "maskable"
