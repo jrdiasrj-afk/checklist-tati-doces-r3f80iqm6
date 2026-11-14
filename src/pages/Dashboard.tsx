@@ -10,6 +10,7 @@ import {
   estaAtrasada,
   minutosAtraso,
   indicadoresDia,
+  montarRanking,
   type Indicadores,
 } from '@/services/indicadores'
 import type { AtribuicaoRecord, UserRecord, ProcessoRecord, AlertaRecord } from '@/types'
@@ -40,6 +41,8 @@ import {
   Timer,
   Bell,
   RefreshCw,
+  Trophy,
+  EyeOff,
 } from 'lucide-react'
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts'
 
@@ -103,6 +106,9 @@ export default function Dashboard() {
   const [alertas, setAlertas] = useState<AlertaRecord[]>([])
   const [loading, setLoading] = useState(true)
 
+  // Histórico de pendências anteriores (para o cartão de atrasadas, filtrável)
+  const [atrasadasHistorico, setAtrasadasHistorico] = useState<AtribuicaoRecord[]>([])
+
   // Drawer de Detalhe da Tarefa
   const [selectedTaskDetail, setSelectedTaskDetail] = useState<AtribuicaoRecord | null>(null)
 
@@ -147,6 +153,7 @@ export default function Dashboard() {
           colaboradorId: colabId,
           status: 'pendente',
         })
+        setAtrasadasHistorico(pastPending)
         setAtrasadasTotal(pastPending.length)
         // Contagem de atrasadas por local (para o filtro de local)
         const porLocal = new Map<string, number>()
@@ -156,6 +163,7 @@ export default function Dashboard() {
         })
         setAtrasadasPorLocal(porLocal)
       } else {
+        setAtrasadasHistorico([])
         setAtrasadasTotal(0)
         setAtrasadasPorLocal(new Map())
       }
@@ -181,7 +189,7 @@ export default function Dashboard() {
     }
   })
 
-  // Filtragem local por área e filtro clicado no gráfico (donut)
+  // Filtragem local por local/área/status (base para TODOS os índices e listas)
   const filteredAtribuicoes = useMemo(() => {
     return atribuicoes.filter((item) => {
       // Filtro de status clicado no donut
@@ -202,12 +210,25 @@ export default function Dashboard() {
     })
   }, [atribuicoes, statusFilter, selectedLocal, selectedArea])
 
-  // KPIs
+  // Atrasadas (datas anteriores) também respeitam local, colaborador e área
+  const atrasadasFiltradas = useMemo(() => {
+    return atrasadasHistorico.filter((item) => {
+      if (selectedLocal !== 'todos') {
+        if (item.expand?.tarefa?.expand?.processo?.local !== selectedLocal) return false
+      }
+      if (selectedArea !== 'todas') {
+        if (item.expand?.tarefa?.expand?.processo?.area !== selectedArea) return false
+      }
+      return true
+    })
+  }, [atrasadasHistorico, selectedLocal, selectedArea])
+
+  // KPIs — calculados sobre a lista JÁ FILTRADA (data + colaborador vem do servidor)
   const kpis = useMemo(() => {
-    const total = atribuicoes.length
-    const concluidas = atribuicoes.filter((a) => a.status === 'concluida').length
-    const pendentes = atribuicoes.filter((a) => a.status === 'pendente').length
-    const naoAplicaveis = atribuicoes.filter((a) => a.status === 'nao_aplicavel').length
+    const total = filteredAtribuicoes.length
+    const concluidas = filteredAtribuicoes.filter((a) => a.status === 'concluida').length
+    const pendentes = filteredAtribuicoes.filter((a) => a.status === 'pendente').length
+    const naoAplicaveis = filteredAtribuicoes.filter((a) => a.status === 'nao_aplicavel').length
     const taxa = total > 0 ? Math.round((concluidas / total) * 100) : 0
 
     return {
@@ -216,10 +237,9 @@ export default function Dashboard() {
       pendentes,
       naoAplicaveis,
       taxa,
-      atrasadas:
-        selectedLocal === 'todos' ? atrasadasTotal : atrasadasPorLocal.get(selectedLocal) || 0,
+      atrasadas: atrasadasFiltradas.length,
     }
-  }, [atribuicoes, atrasadasTotal, atrasadasPorLocal, selectedLocal])
+  }, [filteredAtribuicoes, atrasadasFiltradas])
 
   // Dados do gráfico donut
   const chartData = useMemo(() => {
@@ -236,10 +256,10 @@ export default function Dashboard() {
     ].filter((d) => d.value > 0)
   }, [kpis])
 
-  // Indicadores do dia (estilo Koncluí)
+  // Indicadores do dia (estilo Koncluí) — sobre a lista já filtrada
   const indicadores = useMemo<Indicadores>(
-    () => indicadoresDia(atribuicoes, new Date()),
-    [atribuicoes],
+    () => calcularIndicadores(filteredAtribuicoes),
+    [filteredAtribuicoes],
   )
 
   // Alertas do sistema (coleção alertas) filtrados pelo local selecionado
@@ -266,7 +286,7 @@ export default function Dashboard() {
   // Alertas de itens críticos pendentes/atrasados, com responsável e atraso
   const alertasCriticos = useMemo(() => {
     const agora = new Date()
-    return atribuicoes
+    return filteredAtribuicoes
       .filter((a) => a.status === 'pendente')
       .filter((a) => !!a.expand?.tarefa?.critica || estaAtrasada(a, agora))
       .map((a) => ({
@@ -280,12 +300,12 @@ export default function Dashboard() {
         if (x.critica !== y.critica) return x.critica ? -1 : 1
         return y.min - x.min
       })
-  }, [atribuicoes])
+  }, [filteredAtribuicoes])
 
   // Itens concluídos fora do padrão (medição fora do alvo)
   const foraPadrao = useMemo(
-    () => atribuicoes.filter((a) => a.status === 'concluida' && a.fora_padrao),
-    [atribuicoes],
+    () => filteredAtribuicoes.filter((a) => a.status === 'concluida' && a.fora_padrao),
+    [filteredAtribuicoes],
   )
 
   // Agrupamento por colaborador
@@ -305,6 +325,59 @@ export default function Dashboard() {
 
     return Array.from(map.values())
   }, [filteredAtribuicoes])
+
+  // ===== Ranking por pontos (padrão Koncluí: score 0–100) =====
+  const rankingPontos = useMemo(() => {
+    return montarRanking(filteredAtribuicoes, colaboradores)
+  }, [filteredAtribuicoes, colaboradores])
+
+  // ===== Quem NÃO está acessando: pendentes sem conclusão e sem abertura registrada =====
+  const naoAcessando = useMemo(() => {
+    const agora = new Date()
+    const porColab = new Map<
+      string,
+      { colab: UserRecord | undefined; total: number; diasAtras: number[] }
+    >()
+    filteredAtribuicoes
+      .filter((a) => a.status === 'pendente')
+      .forEach((a) => {
+        const id = a.colaborador
+        if (!porColab.has(id)) {
+          porColab.set(id, { colab: a.expand?.colaborador, total: 0, diasAtras: [] })
+        }
+        const entry = porColab.get(id)!
+        entry.total += 1
+        const ultimaAtividade = a.updated || a.created
+        const dias = Math.floor((agora.getTime() - new Date(ultimaAtividade).getTime()) / 86400000)
+        entry.diasAtras.push(dias)
+      })
+
+    const semAcesso = colaboradores
+      .filter((c) => c.role === 'colaborador' || c.role === 'gerente')
+      .filter((c) => {
+        if (selectedColab !== 'todos' && c.id !== selectedColab) return false
+        if (selectedLocal !== 'todos' && c.local && c.local !== selectedLocal) return false
+        return true
+      })
+      .map((c) => {
+        const entry = porColab.get(c.id)
+        const pendentes = entry?.total || 0
+        const ultimoAcesso = c.ultimo_acesso ? new Date(c.ultimo_acesso) : null
+        const diasSemAcesso = ultimoAcesso
+          ? Math.floor((agora.getTime() - ultimoAcesso.getTime()) / 86400000)
+          : null
+        return { colab: c, pendentes, diasSemAcesso }
+      })
+      .filter(
+        ({ pendentes, diasSemAcesso }) =>
+          diasSemAcesso === null || diasSemAcesso >= 2 || pendentes > 0,
+      )
+      .sort(
+        (a, b) => (b.diasSemAcesso ?? 999) - (a.diasSemAcesso ?? 999) || b.pendentes - a.pendentes,
+      )
+
+    return semAcesso
+  }, [filteredAtribuicoes, colaboradores, selectedColab, selectedLocal])
 
   return (
     <MainLayout
@@ -649,6 +722,132 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* ================= RANKING POR PONTOS + QUEM NÃO ESTÁ ACESSANDO ================= */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        {/* Ranking de funcionários por pontos */}
+        <div className="bg-white p-6 rounded-3xl border border-[#F2A65A]/20 shadow-xs">
+          <div className="flex items-center gap-2 mb-1">
+            <Trophy className="w-4 h-4 text-[#E0447C]" />
+            <h2 className="text-lg font-display font-bold text-[#3B2B2B]">Ranking de Pontos</h2>
+          </div>
+          <p className="text-xs text-[#8A6F6F] mb-4">
+            Quem está entregando todas as atividades no período filtrado — pontuação no padrão
+            Koncluí (score 0–100).
+          </p>
+          {rankingPontos.length === 0 ? (
+            <p className="text-xs text-[#8A6F6F] py-4 text-center">
+              Sem tarefas no período para pontuar.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {rankingPontos.map((r, i) => {
+                const emDia = r.total === 0 || r.concluidas + 0 >= r.total * 0.999
+                const isTop3 = i < 3
+                return (
+                  <div
+                    key={r.colaboradorId}
+                    className={`flex items-center gap-3 p-3 rounded-2xl border transition ${
+                      isTop3
+                        ? 'border-[#E0447C]/30 bg-[#FFF3E8]/60'
+                        : 'border-[#F2A65A]/15 bg-white'
+                    }`}
+                  >
+                    <span
+                      className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-extrabold shrink-0 ${
+                        i === 0
+                          ? 'bg-[#E0447C] text-white'
+                          : i === 1
+                            ? 'bg-[#F2A65A] text-white'
+                            : i === 2
+                              ? 'bg-[#B77A0A] text-white'
+                              : 'bg-[#FFF9F2] text-[#8A6F6F] border border-[#F2A65A]/30'
+                      }`}
+                    >
+                      {i + 1}º
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold text-[#3B2B2B] truncate">
+                        {r.nome}
+                        {emDia && (
+                          <span className="ml-2 text-[10px] font-bold text-[#2D7A51] bg-[#EDF8F1] px-1.5 py-0.5 rounded-full">
+                            em dia
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-[11px] text-[#8A6F6F]">
+                        {r.concluidas}/{r.total} entregues · {r.percentual}% de conclusão
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-lg font-display font-extrabold text-[#E0447C] leading-none">
+                        {r.score}
+                      </p>
+                      <p className="text-[10px] text-[#8A6F6F] font-semibold">pontos</p>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Quem NÃO está acessando as atividades */}
+        <div className="bg-white p-6 rounded-3xl border border-[#F2A65A]/20 shadow-xs">
+          <div className="flex items-center gap-2 mb-1">
+            <EyeOff className="w-4 h-4 text-[#B77A0A]" />
+            <h2 className="text-lg font-display font-bold text-[#3B2B2B]">Não estão acessando</h2>
+          </div>
+          <p className="text-xs text-[#8A6F6F] mb-4">
+            Colaboradores com tarefas pendentes sem nenhum registro de interação — ou sem acessar o
+            sistema há 2 dias ou mais.
+          </p>
+          {naoAcessando.length === 0 ? (
+            <p className="text-xs text-[#3FA372] py-4 text-center font-semibold">
+              🎉 Toda a equipe está acessando e registrando as tarefas.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {naoAcessando.slice(0, 8).map(({ colab, pendentes, diasSemAcesso }) => (
+                <div
+                  key={colab.id}
+                  className="flex items-center gap-3 p-3 rounded-2xl border border-[#F5B841]/30 bg-[#FFFBEB]/60"
+                >
+                  <Avatar className="w-9 h-9 border border-[#F2A65A]/40 shrink-0">
+                    <AvatarImage
+                      src={colab.avatar ? usersService.getFileUrl(colab, colab.avatar) : ''}
+                    />
+                    <AvatarFallback className="bg-[#F5B841]/15 text-[#B77A0A] font-bold text-[10px]">
+                      {colab.name ? colab.name.slice(0, 2).toUpperCase() : '?'}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold text-[#3B2B2B] truncate">
+                      {colab.name || colab.email}
+                    </p>
+                    <p className="text-[11px] text-[#8A6F6F]">
+                      {diasSemAcesso === null
+                        ? 'Nunca registrou acesso ao checklist'
+                        : `Sem acessar há ${diasSemAcesso} dia(s)`}
+                      {pendentes > 0 && ` · ${pendentes} tarefa(s) pendente(s)`}
+                    </p>
+                  </div>
+                  {diasSemAcesso !== null && diasSemAcesso >= 3 && (
+                    <span className="text-[10px] font-bold text-[#E5484D] bg-[#E5484D]/10 px-2 py-0.5 rounded-full shrink-0">
+                      crítico
+                    </span>
+                  )}
+                </div>
+              ))}
+              {naoAcessando.length > 8 && (
+                <p className="text-[11px] text-[#8A6F6F] pl-1">
+                  + {naoAcessando.length - 8} outros…
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* ================= GRID: GRÁFICO DONUT + LISTA DO DIA ================= */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

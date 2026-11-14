@@ -52,6 +52,15 @@ export default function Hoje() {
     loadData()
   }, [loadData])
 
+  // Registra evidência de acesso (users.ultimo_acesso) para a seção
+  // "Não estão acessando" da dashboard — fire-and-forget, sem quebrar a tela.
+  useEffect(() => {
+    if (!user) return
+    usersService.touchUltimoAcesso(user.id).catch(() => {
+      /* silencioso: falha de permissão não deve impactar a tela */
+    })
+  }, [user])
+
   // Tempo real
   useRealtime('atribuicoes', loadData)
 

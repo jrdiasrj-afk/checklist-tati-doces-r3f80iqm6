@@ -14,7 +14,9 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { toast } from 'sonner'
-import { ShieldCheck, UserCheck, AlertTriangle, MapPin, Pencil } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { ShieldCheck, UserCheck, AlertTriangle, MapPin, Pencil, UserPlus } from 'lucide-react'
 
 export default function Equipe() {
   const [users, setUsers] = useState<UserRecord[]>([])
@@ -37,6 +39,45 @@ export default function Equipe() {
     supervisor: string
   } | null>(null)
   const [savingEdit, setSavingEdit] = useState(false)
+
+  // Modal de novo colaborador
+  const [novoModal, setNovoModal] = useState(false)
+  const [novoForm, setNovoForm] = useState<{
+    name: string
+    email: string
+    password: string
+    role: UserRole
+    local: LocalValue | ''
+  }>({ name: '', email: '', password: '', role: 'colaborador', local: '' })
+  const [savingNovo, setSavingNovo] = useState(false)
+
+  const handleCriarColaborador = async () => {
+    setSavingNovo(true)
+    try {
+      await usersService.create({
+        name: novoForm.name.trim(),
+        email: novoForm.email.trim(),
+        password: novoForm.password,
+        role: novoForm.role,
+        local: novoForm.local,
+      })
+      toast.success('Colaborador cadastrado com sucesso!')
+      setNovoModal(false)
+      setNovoForm({ name: '', email: '', password: '', role: 'colaborador', local: '' })
+      loadEquipe()
+    } catch (err: any) {
+      const field = err?.data?.data || {}
+      const firstField = Object.keys(field)[0]
+      const msg =
+        (firstField && field[firstField]?.message) ||
+        err?.data?.message ||
+        err?.message ||
+        'Não foi possível criar a conta.'
+      toast.error(msg)
+    } finally {
+      setSavingNovo(false)
+    }
+  }
 
   const loadEquipe = async () => {
     setLoading(true)
@@ -146,7 +187,18 @@ export default function Equipe() {
   }
 
   return (
-    <MainLayout title="Gestão da Equipe">
+    <MainLayout
+      title="Gestão da Equipe"
+      actions={
+        <Button
+          onClick={() => setNovoModal(true)}
+          className="rounded-full bg-[#E0447C] hover:bg-[#C23066] text-white font-bold shadow-sm text-xs"
+        >
+          <UserPlus className="w-4 h-4 mr-2" />
+          Novo Colaborador
+        </Button>
+      }
+    >
       <div className="bg-white rounded-3xl p-6 sm:p-8 border border-[#F2A65A]/20 shadow-xs">
         <div className="pb-5 border-b border-[#F2A65A]/15 mb-4">
           <h2 className="font-display font-bold text-xl text-[#3B2B2B]">
@@ -262,6 +314,124 @@ export default function Equipe() {
           </div>
         )}
       </div>
+
+      {/* ================= MODAL NOVO COLABORADOR ================= */}
+      {novoModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-sm w-full border border-[#F2A65A]/20 shadow-2xl">
+            <h3 className="text-lg font-display font-bold text-[#3B2B2B]">Novo Colaborador</h3>
+            <p className="text-xs text-[#8A6F6F] mt-1 mb-5">
+              Cria a conta de acesso do colaborador — ele já aparece na escala e na dashboard.
+            </p>
+
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold uppercase tracking-wider text-[#3B2B2B]">
+                  Nome
+                </Label>
+                <Input
+                  value={novoForm.name}
+                  onChange={(e) => setNovoForm((f) => ({ ...f, name: e.target.value }))}
+                  placeholder="Nome do colaborador"
+                  className="h-11 rounded-xl bg-[#FFF9F2]/60 border-[#F2A65A]/30 focus-visible:ring-[#E0447C]"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold uppercase tracking-wider text-[#3B2B2B]">
+                  E-mail
+                </Label>
+                <Input
+                  type="email"
+                  value={novoForm.email}
+                  onChange={(e) => setNovoForm((f) => ({ ...f, email: e.target.value }))}
+                  placeholder="email@tatidoce.com"
+                  className="h-11 rounded-xl bg-[#FFF9F2]/60 border-[#F2A65A]/30 focus-visible:ring-[#E0447C]"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold uppercase tracking-wider text-[#3B2B2B]">
+                  Senha
+                </Label>
+                <Input
+                  type="password"
+                  value={novoForm.password}
+                  onChange={(e) => setNovoForm((f) => ({ ...f, password: e.target.value }))}
+                  placeholder="Mínimo de 8 caracteres"
+                  className="h-11 rounded-xl bg-[#FFF9F2]/60 border-[#F2A65A]/30 focus-visible:ring-[#E0447C]"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold uppercase tracking-wider text-[#3B2B2B]">
+                  Perfil
+                </Label>
+                <Select
+                  value={novoForm.role}
+                  onValueChange={(val) => setNovoForm((f) => ({ ...f, role: val as UserRole }))}
+                >
+                  <SelectTrigger className="h-11 rounded-xl bg-[#FFF9F2]/60 border-[#F2A65A]/30 focus-visible:ring-[#E0447C]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="colaborador">Colaborador</SelectItem>
+                    <SelectItem value="gerente">Gerente</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold uppercase tracking-wider text-[#3B2B2B]">
+                  Local
+                </Label>
+                <Select
+                  value={novoForm.local}
+                  onValueChange={(val) =>
+                    setNovoForm((f) => ({ ...f, local: val as LocalValue | '' }))
+                  }
+                >
+                  <SelectTrigger className="h-11 rounded-xl bg-[#FFF9F2]/60 border-[#F2A65A]/30 focus-visible:ring-[#E0447C]">
+                    <SelectValue placeholder="Selecione o local" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LOCAIS.map((l: LocalValue) => (
+                      <SelectItem key={l} value={l}>
+                        {LOCAL_LABELS[l]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setNovoModal(false)}
+                className="rounded-full border-stone-300 text-xs font-semibold"
+              >
+                Cancelar
+              </Button>
+              <Button
+                size="sm"
+                disabled={
+                  savingNovo ||
+                  !novoForm.name.trim() ||
+                  !novoForm.email.trim() ||
+                  novoForm.password.length < 8 ||
+                  !novoForm.local
+                }
+                onClick={handleCriarColaborador}
+                className="rounded-full bg-[#E0447C] hover:bg-[#C23066] text-white text-xs font-bold"
+              >
+                {savingNovo ? 'Criando...' : 'Criar conta'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ================= MODAL EDIÇÃO LOCAL/SUPERVISOR ================= */}
       {editModal && (

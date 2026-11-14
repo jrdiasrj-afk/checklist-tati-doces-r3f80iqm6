@@ -1,5 +1,5 @@
 import pb from '@/lib/pocketbase/client'
-import type { LocalValue, UserRecord } from '@/types'
+import type { LocalValue, UserRecord, UserRole } from '@/types'
 
 export const usersService = {
   async list() {
@@ -10,6 +10,24 @@ export const usersService = {
 
   async getById(id: string) {
     return pb.collection<UserRecord>('users').getOne(id)
+  },
+
+  /** Gerente cadastra novo colaborador (equipe) */
+  async create(data: {
+    name: string
+    email: string
+    password: string
+    role: UserRole
+    local?: LocalValue | ''
+  }) {
+    return pb.collection<UserRecord>('users').create({
+      name: data.name,
+      email: data.email,
+      password: data.password,
+      passwordConfirm: data.password,
+      role: data.role,
+      local: data.local || '',
+    })
   },
 
   async updateRole(id: string, role: 'gerente' | 'colaborador') {
@@ -36,6 +54,17 @@ export const usersService = {
       return pb.collection<UserRecord>('users').update(id, formData)
     }
     return pb.collection<UserRecord>('users').update(id, { name: data.name })
+  },
+
+  /** Registra o momento em que o colaborador acessou suas tarefas (tela Hoje). */
+  async touchUltimoAcesso(id: string) {
+    try {
+      await pb
+        .collection<UserRecord>('users')
+        .update(id, { ultimo_acesso: new Date().toISOString() })
+    } catch {
+      // silencioso: sinal de acesso é best-effort
+    }
   },
 
   getFileUrl(

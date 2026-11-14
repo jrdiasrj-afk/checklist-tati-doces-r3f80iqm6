@@ -11,6 +11,7 @@ export interface UserRecord {
   role: UserRole
   local?: LocalValue
   supervisor?: string
+  ultimo_acesso?: string
   created: string
   updated: string
 }

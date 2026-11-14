@@ -19,6 +19,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { toast } from 'sonner'
 import {
   Download,
+  FileDown,
   Filter,
   BarChart3,
   Calendar,
@@ -40,6 +41,7 @@ import {
   calcularIndicadores,
   type Indicadores,
 } from '@/services/indicadores'
+import { exportarRelatorioPDF } from '@/services/pdf'
 import {
   ResponsiveContainer,
   BarChart,
@@ -372,16 +374,36 @@ export default function Relatorios() {
     toast.success('Relatório CSV exportado com sucesso!')
   }
 
+  const handleExportPDF = () => {
+    exportarRelatorioPDF(registros, {
+      dataInicio,
+      dataFim,
+      colaborador:
+        colaboradorId === 'todos'
+          ? 'todos'
+          : colaboradores.find((c) => c.id === colaboradorId)?.name || colaboradorId,
+      status,
+    })
+  }
+
   return (
     <MainLayout
       title="Relatórios e Indicadores"
       actions={
-        <Button
-          onClick={handleExportCSV}
-          className="rounded-full bg-[#E0447C] hover:bg-[#C23066] text-white font-bold text-xs shadow-sm cursor-pointer"
-        >
-          <Download className="w-4 h-4 mr-1.5" /> Exportar CSV
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={handleExportPDF}
+            className="rounded-full bg-[#E0447C] hover:bg-[#C23066] text-white font-bold text-xs shadow-sm cursor-pointer"
+          >
+            <FileDown className="w-4 h-4 mr-1.5" /> Exportar PDF
+          </Button>
+          <Button
+            onClick={handleExportCSV}
+            className="rounded-full bg-white hover:bg-[#FFF3E8] border border-[#E0447C]/40 text-[#E0447C] font-bold text-xs shadow-sm cursor-pointer"
+          >
+            <Download className="w-4 h-4 mr-1.5" /> Exportar CSV
+          </Button>
+        </div>
       }
     >
       {/* ================= BARRA DE FILTROS ================= */}
