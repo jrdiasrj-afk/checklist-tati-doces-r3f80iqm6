@@ -1,14 +1,14 @@
 {
-  "generatedAt": "2026-11-14T20:44:17.877Z",
+  "generatedAt": "2026-11-14T21:06:05.637Z",
   "collections": [
     {
       "name": "users",
       "type": "auth",
       "apiRules": {
-        "list": "@request.auth.id != ''",
-        "view": "@request.auth.id != ''",
-        "create": "",
-        "update": "id = @request.auth.id && @request.body.role:changed = false",
+        "list": "(@request.auth.role = 'gerente' || id = @request.auth.id)",
+        "view": "(@request.auth.role = 'gerente' || id = @request.auth.id)",
+        "create": "@request.auth.role = 'gerente'",
+        "update": "(@request.auth.role = 'gerente' || (id = @request.auth.id && @request.body.pin:isset = false && @request.body.role:isset = false && @request.body.local:isset = false && @request.body.supervisor:isset = false))",
         "delete": "id = @request.auth.id"
       },
       "fields": [
@@ -74,7 +74,8 @@
       ],
       "indexes": [
         "CREATE UNIQUE INDEX `idx_tokenKey__pb_users_auth_` ON `users` (`tokenKey`)",
-        "CREATE UNIQUE INDEX `idx_email__pb_users_auth_` ON `users` (`email`) WHERE `email` != ''"
+        "CREATE UNIQUE INDEX `idx_email__pb_users_auth_` ON `users` (`email`) WHERE `email` != ''",
+        "CREATE UNIQUE INDEX `idx_users_pin` ON `users` (`pin`) WHERE `pin` != ''"
       ]
     },
     {
