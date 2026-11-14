@@ -27,6 +27,7 @@ import {
   Clock,
   MinusCircle,
   Camera,
+  Video,
   X,
   Maximize2,
   Zap,
@@ -103,8 +104,9 @@ export default function Relatorios() {
   const [registros, setRegistros] = useState<AtribuicaoRecord[]>([])
   const [loading, setLoading] = useState(true)
 
-  // Lightbox da foto
+  // Lightbox da evidência (foto ou vídeo)
   const [lightboxFotoUrl, setLightboxFotoUrl] = useState<string | null>(null)
+  const [lightboxEhVideo, setLightboxEhVideo] = useState(false)
 
   // Aba ativa (Resumo / Matriz / Ranking)
   const [aba, setAba] = useState<'resumo' | 'matriz' | 'ranking'>('resumo')
@@ -317,6 +319,7 @@ export default function Relatorios() {
       'ForaPadrao',
       'Observacao',
       'PossuiFoto',
+      'PossuiVideo',
     ]
 
     const rows = registros.map((r) => {
@@ -329,6 +332,7 @@ export default function Relatorios() {
       const concluidaEm = r.concluida_em ? new Date(r.concluida_em).toLocaleString('pt-BR') : ''
       const obs = (r.observacao || '').replace(/"/g, '""')
       const temFoto = r.foto ? 'Sim' : 'Nao'
+      const temVideo = r.video ? 'Sim' : 'Nao'
       const limite = r.horario_limite || (r.expand?.tarefa as any)?.horario_limite || ''
       const atrasoMin =
         r.status === 'concluida' && limite && r.concluida_em
@@ -359,6 +363,7 @@ export default function Relatorios() {
         `"${r.fora_padrao ? 'Sim' : 'Nao'}"`,
         `"${obs}"`,
         `"${temFoto}"`,
+        `"${temVideo}"`,
       ].join(';')
     })
 
@@ -788,7 +793,7 @@ export default function Relatorios() {
                     <th className="py-3 px-3">Processo</th>
                     <th className="py-3 px-3 text-center">Status</th>
                     <th className="py-3 px-3">Conclusão</th>
-                    <th className="py-3 px-3">Foto</th>
+                    <th className="py-3 px-3">Evidência</th>
                     <th className="py-3 px-3">Observação</th>
                   </tr>
                 </thead>
@@ -802,6 +807,7 @@ export default function Relatorios() {
                     const isNaoAplicavel = item.status === 'nao_aplicavel'
 
                     const fotoUrl = item.foto ? usersService.getFileUrl(item, item.foto) : null
+                    const videoUrl = item.video ? usersService.getFileUrl(item, item.video) : null
 
                     return (
                       <tr key={item.id} className="hover:bg-[#FFF9F2]/50 transition">
@@ -850,10 +856,25 @@ export default function Relatorios() {
                             : '—'}
                         </td>
                         <td className="py-3 px-3">
-                          {fotoUrl ? (
+                          {videoUrl ? (
                             <button
                               type="button"
-                              onClick={() => setLightboxFotoUrl(fotoUrl)}
+                              onClick={() => {
+                                setLightboxEhVideo(true)
+                                setLightboxFotoUrl(videoUrl)
+                              }}
+                              title="Assistir vídeo da tarefa"
+                              className="w-8 h-8 rounded-lg overflow-hidden border border-[#3B2B2B]/30 hover:scale-105 transition flex items-center justify-center bg-[#3B2B2B] cursor-pointer"
+                            >
+                              <Video className="w-4 h-4 text-white" />
+                            </button>
+                          ) : fotoUrl ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setLightboxEhVideo(false)
+                                setLightboxFotoUrl(fotoUrl)
+                              }}
                               className="w-8 h-8 rounded-lg overflow-hidden border border-[#E0447C]/40 hover:scale-105 transition block cursor-pointer"
                             >
                               <img
@@ -895,11 +916,21 @@ export default function Relatorios() {
             >
               <X className="w-5 h-5" />
             </button>
-            <img
-              src={lightboxFotoUrl}
-              alt="Evidência ampliada"
-              className="w-full h-auto max-h-[85vh] object-contain rounded-2xl"
-            />
+            {lightboxEhVideo ? (
+              <video
+                src={lightboxFotoUrl}
+                controls
+                autoPlay
+                playsInline
+                className="w-full h-auto max-h-[85vh] rounded-2xl bg-black"
+              />
+            ) : (
+              <img
+                src={lightboxFotoUrl}
+                alt="Evidência ampliada"
+                className="w-full h-auto max-h-[85vh] object-contain rounded-2xl"
+              />
+            )}
           </div>
         </div>
       )}

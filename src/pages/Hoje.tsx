@@ -32,12 +32,43 @@ const TIPO_LIMITE_MENCIONA = (limite?: string) => (limite ? `Limite: ${limite.sl
 /** O gerente pode reaproveitar o veredito anterior ou o item volta a pendente */
 type AcaoReprovada = 'reenviar' | 'voltar_pendente'
 
-/** Uma tarefa pede foto quando o gerente marcou registro 'foto' ou evidência obrigatória */
+/** Uma tarefa pede vídeo quando o gerente marcou registro 'video' */
+const tarefaPedeVideo = (tarefa?: AtribuicaoRecord['expand']['tarefa']) =>
+  tarefa?.tipo_registro === 'video'
+/** Vídeo obrigatório = pede vídeo E o gerente marcou evidencia_obrigatoria */
+const tarefaExigeVideo = (tarefa?: AtribuicaoRecord['expand']['tarefa']) =>
+  tarefaPedeVideo(tarefa) && !!tarefa?.evidencia_obrigatoria
+/** Limite de duração do vídeo de evidência, em segundos */
+const VIDEO_DURACAO_MAX = 30
+
+/**
+ * Uma tarefa pede foto quando o gerente marcou registro 'foto' ou evidência
+ * obrigatória — mas nunca quando pede vídeo (fluxos separados).
+ */
 const tarefaPedeFoto = (tarefa?: AtribuicaoRecord['expand']['tarefa']) =>
-  tarefa?.tipo_registro === 'foto' || !!tarefa?.evidencia_obrigatoria
+  !tarefaPedeVideo(tarefa) && (tarefa?.tipo_registro === 'foto' || !!tarefa?.evidencia_obrigatoria)
 /** Foto obrigatória = pede foto E o gerente marcou evidencia_obrigatoria */
 const tarefaExigeFoto = (tarefa?: AtribuicaoRecord['expand']['tarefa']) =>
   tarefaPedeFoto(tarefa) && !!tarefa?.evidencia_obrigatoria
+
+/** Lê a duração (segundos) do arquivo de vídeo pelos metadados; null = não deu para ler */
+function lerDuracaoVideo(file: File): Promise<number | null> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file)
+    const video = document.createElement('video')
+    video.preload = 'metadata'
+    video.onloadedmetadata = () => {
+      const d = Number.isFinite(video.duration) ? video.duration : null
+      URL.revokeObjectURL(url)
+      resolve(d)
+    }
+    video.onerror = () => {
+      URL.revokeObjectURL(url)
+      resolve(null)
+    }
+    video.src = url
+  })
+}
 
 export default function Hoje() {
   const { user } = useAuth()
@@ -106,6 +137,7 @@ export default function Hoje() {
         status: payload.status,
         observacao: payload.observacao,
         fotoFile: payload.fotoFile,
+        videoFile: payload.videoFile,
         concluida_em: new Date().toISOString(),
         medicao_valor: payload.medicao_valor,
         fora_padrao: payload.fora_padrao,
@@ -118,27 +150,27 @@ export default function Hoje() {
       }
       setModalAberto(null)
       loadData()
-      if (payload.status === 'concluida' && payload.fotoFile) {
-        toast.info('Foto enviada! A conferência automática da IA acontece em instantes.')
+      if (payload.status === 'concluida' && (payload.fotoFile || payload.videoFile)) {
+        toast.info('Evidência enviada! A conferência automática da IA acontece em instantes.')
       }
     } catch (err: any) {
       toast.error(err?.message || 'Erro ao atualizar o item.')
     }
   }
 
-  // Fluxo do colaborador quando a IA reprova a foto: reenvia foto ou volta a pendente
-  const reenviarFoto = async (a: AtribuicaoRecord, acao: AcaoReprovada, fotoFile: File | null) => {
+  // Fluxo do colaborador quando a IA reprova a evidência: reenvia foto/vídeo ou volta a pendente
+  const reenviarFoto = async (a: AtribuicaoRecord, acao: AcaoReprovada, arquivo: File | null) => {
     try {
       if (acao === 'voltar_pendente') {
         await atribuicoesService.voltarPendente(a.id)
-        toast.info('Item voltou para pendente. Envie uma nova foto ao concluir.')
+        toast.info('Item voltou para pendente. Envie a evidência novamente ao concluir.')
       } else {
-        if (!fotoFile) {
-          toast.error('Selecione uma foto para reenviar.')
+        if (!arquivo) {
+          toast.error('Selecione a evidência (foto ou vídeo) para reenviar.')
           return
         }
-        await atribuicoesService.reenviarFoto(a.id, fotoFile)
-        toast.success('Nova foto enviada! A conferência da IA acontece em instantes.')
+        await atribuicoesService.reenviarEvidencia(a.id, arquivo)
+        toast.success('Nova evidência enviada! A conferência da IA acontece em instantes.')
       }
       setReenviandoId(null)
       loadData()

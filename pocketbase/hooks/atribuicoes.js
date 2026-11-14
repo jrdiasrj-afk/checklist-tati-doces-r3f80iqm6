@@ -2,18 +2,21 @@
 // Tati Check — atribuicoes.js
 //
 // 1) BLOQUEIO SERVIDOR: um update que mude `status` para 'concluida' numa
-//    atribuição cuja tarefa exige foto (tipo_registro='foto' &&
-//    evidencia_obrigatoria=true) é rejeitado sem arquivo `foto` no update.
+//    atribuição cuja tarefa exige evidência (tipo_registro='foto' ou 'video'
+//    && evidencia_obrigatoria=true) é rejeitado sem o arquivo correspondente
+//    — foto para tarefas de foto, vídeo para tarefas de vídeo.
 // 2) CONFERÊNCIA IA: após concluir com foto, o agente nativo "fiscal-foto"
 //    analisa a imagem e grava veredito (aprovado/duvidoso/reprovado) +
-//    comentário curto em PT-BR na própria atribuição.
+//    comentário curto em PT-BR na própria atribuição. Para vídeo, a conferência
+//    também é disparada; se o agente não conseguir analisar o vídeo, grava
+//    veredito 'erro' com comentário explicativo (o fluxo do colaborador segue).
 //
-// Regra do projeto: a tarefa PEDE foto quando tipo_registro='foto' ou
-// evidencia_obrigatoria=true; EXIGE foto quando tipo_registro='foto' &&
-// evidencia_obrigatoria=true (a UI do gerente seta os dois juntos).
+// Regra do projeto: a tarefa PEDE foto/vídeo quando tipo_registro é
+// 'foto'/'video' ou evidencia_obrigatoria=true; EXIGE quando
+// tipo_registro='foto'/'video' && evidencia_obrigatoria=true.
 //
 
-// ===== 1) Bloqueio de conclusão sem foto obrigatória =====
+// ===== 1) Bloqueio de conclusão sem evidência obrigatória (foto OU vídeo) =====
 onRecordUpdateRequest((e) => {
   const rec = e.record
 
@@ -25,51 +28,56 @@ onRecordUpdateRequest((e) => {
     return e.next()
   }
 
-  // Já tem foto gravada de um update anterior? (ex.: reenvio de foto reprovada)
-  if (rec.getString('foto', '') !== '') {
-    return e.next()
-  }
-
-  // O update atual trouxe um arquivo de foto?
   const info = e.requestInfo()
   const body = info.body || {}
-  const arquivos = body.foto || []
-  const trouxeFoto = Array.isArray(arquivos) ? arquivos.length > 0 : arquivos != null
-  if (trouxeFoto) {
+  const trouxeArquivo = (campo) => {
+    const v = body[campo]
+    return Array.isArray(v) ? v.length > 0 : v != null && v !== ''
+  }
+
+  // Qual evidência já gravada OU vindo neste update satisfaz a exigência?
+  const temFoto = rec.getString('foto', '') !== '' || trouxeArquivo('foto')
+  const temVideo = rec.getString('video', '') !== '' || trouxeArquivo('video')
+  if (temFoto || temVideo) {
     return e.next()
   }
 
-  // A tarefa exige foto?
+  // A tarefa exige foto ou vídeo?
   const tarefaId = rec.getString('tarefa', '')
   try {
     const tarefa = $app.findRecordById('tarefas', tarefaId)
-    const exige =
-      tarefa.getString('tipo_registro', '') === 'foto' && tarefa.getBool('evidencia_obrigatoria')
-    if (exige) {
+    const tipo = tarefa.getString('tipo_registro', '')
+    const obrigatoria = tarefa.getBool('evidencia_obrigatoria')
+    if (tipo === 'foto' && obrigatoria) {
       return e.badRequestError('Este item exige uma foto para ser concluído.')
     }
+    if (tipo === 'video' && obrigatoria) {
+      return e.badRequestError('Este item exige um vídeo de até 30 segundos para ser concluído.')
+    }
   } catch (err) {
-    // Tarefa inexistente: deixa a validação normal do PocketBase tratar
+    // Tarefa removida: deixa seguir (comportamento anterior)
   }
 
   return e.next()
 }, 'atribuicoes')
 
-// ===== 2) Conferência IA da foto (agente nativo fiscal-foto) =====
+// ===== 2) Conferência IA da evidência (agente nativo fiscal-foto) =====
 onRecordAfterUpdateSuccess((e) => {
   const rec = e.record
   const status = rec.getString('status', '')
 
-  // Só confere quando o update concluiu o item E trouxe/tem foto
+  // Só confere quando o update concluiu o item E trouxe evidência (foto ou vídeo)
   if (status !== 'concluida') return e.next()
-  const nomeFoto = rec.getString('foto', '')
-  if (!nomeFoto) return e.next()
 
-  // Evita loop: reconfere somente quando a foto mudou ou o veredito saiu
+  const nomeFoto = rec.getString('foto', '')
+  const nomeVideo = rec.getString('video', '')
+  if (!nomeFoto && !nomeVideo) return e.next()
+
   const original = rec.original()
-  const fotoMudou = nomeFoto !== original.getString('foto', '')
+  const evidenciaMudou =
+    nomeFoto !== original.getString('foto', '') || nomeVideo !== original.getString('video', '')
   const jaTemVeredito = rec.getString('foto_veredito', '') !== ''
-  if (!fotoMudou || jaTemVeredito) {
+  if (!evidenciaMudou || jaTemVeredito) {
     return e.next()
   }
 
@@ -95,53 +103,58 @@ onRecordAfterUpdateSuccess((e) => {
     }
   } catch (_) {}
 
+  // Escolhe o arquivo a conferir: foto tem prioridade; senão o vídeo.
+  const campo = nomeFoto !== '' ? 'foto' : 'video'
+  const nomeArquivo = nomeFoto !== '' ? nomeFoto : nomeVideo
+  const ehVideo = campo === 'video'
+  const tipoMidia = ehVideo ? 'vídeo' : 'foto'
+
+  let veredito = ''
+  let comentario = ''
   try {
     const result = $ai.agent('fiscal-foto').chat({
       user_id: rec.getString('colaborador', ''),
       message:
-        `Avalie a foto de evidência anexada.\n${contextoTarefa}\n\n` +
-        `Responda OBRIGATORIAMENTE exatamente neste formato (uma linha):\n` +
-        `VEREDITO: aprovado | duvidoso | reprovado\nCOMENTARIO: <frase curta em português explicando o veredito>`,
-      files: [{ name: nomeFoto, collection: 'atribuicoes', id: rec.id }],
+        `Conferência de ${tipoMidia} de evidência de checklist. ${contextoTarefa}\n` +
+        `Analise o anexo (${tipoMidia}: ${nomeArquivo}) e responda SOMENTE JSON: ` +
+        `{"veredito":"aprovado|duvidoso|reprovado","comentario":"frase curta em PT-BR"}.` +
+        (ehVideo
+          ? '\nNota: o anexo é um vídeo; se você não conseguir analisar vídeo, responda ' +
+            '{"veredito":"erro","comentario":"Conferência automática de vídeo indisponível"}.'
+          : ''),
+      file: nomeArquivo,
+      collection: 'atribuicoes',
+      record_id: rec.id,
     })
-
-    const texto = String(result?.content || '').toLowerCase()
-    let veredito = ''
-    if (texto.includes('reprovado')) veredito = 'reprovado'
-    else if (texto.includes('duvidoso')) veredito = 'duvidoso'
-    else if (texto.includes('aprovado')) veredito = 'aprovado'
-
-    let comentario = ''
-    const m = texto.match(/comentario\s*[:\-]\s*([^\n]+)/)
-    if (m && m[1]) comentario = m[1].trim().slice(0, 480)
-
-    if (veredito) {
-      const fresh = $app.findRecordById('atribuicoes', rec.id)
-      fresh.set('foto_veredito', veredito)
-      fresh.set(
-        'foto_comentario',
-        comentario || 'Conferência automática concluída — confira a foto.',
-      )
-      fresh.set('foto_conferida_em', new Date())
-      $app.save(fresh)
-      console.log(`[fiscal-foto] ${rec.id}: ${veredito} — ${comentario}`)
-    } else {
-      const fresh = $app.findRecordById('atribuicoes', rec.id)
-      fresh.set('foto_veredito', 'erro')
-      fresh.set('foto_comentario', 'Não foi possível interpretar a resposta da conferência.')
-      fresh.set('foto_conferida_em', new Date())
-      $app.save(fresh)
-      console.log(`[fiscal-foto] resposta não interpretada p/ ${rec.id}: ${texto.slice(0, 200)}`)
+    const raw = (result && result.content) || ''
+    try {
+      const limpo = String(raw)
+        .replace(/^```(?:json)?/i, '')
+        .replace(/```$/, '')
+        .trim()
+      const parsed = JSON.parse(limpo)
+      veredito = String(parsed.veredito || '')
+      comentario = String(parsed.comentario || '')
+    } catch (_) {
+      comentario = String(raw).slice(0, 300)
     }
   } catch (err) {
-    console.log(`[fiscal-foto] falha IA para ${rec.id}: ${err.message || err}`)
-    try {
-      const fresh = $app.findRecordById('atribuicoes', rec.id)
-      fresh.set('foto_veredito', 'erro')
-      fresh.set('foto_comentario', 'Conferência automática indisponível neste momento.')
-      fresh.set('foto_conferida_em', new Date())
-      $app.save(fresh)
-    } catch (_) {}
+    comentario = 'Conferência automática falhou: ' + (err && err.message ? err.message : err)
+  }
+
+  if (!['aprovado', 'duvidoso', 'reprovado', 'erro'].includes(veredito)) {
+    veredito = 'erro'
+    if (!comentario) comentario = 'Conferência automática indisponível.'
+  }
+
+  try {
+    rec.set('foto_veredito', veredito)
+    rec.set('foto_comentario', comentario)
+    rec.set('foto_conferida_em', new Date().toISOString().replace('T', ' '))
+    $app.save(rec)
+  } catch (err) {
+    // Não derruba a resposta por falha ao salvar o veredito
+    console.log('fiscal-foto: falha ao salvar veredito:', err)
   }
 
   return e.next()

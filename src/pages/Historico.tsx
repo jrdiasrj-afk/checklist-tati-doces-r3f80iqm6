@@ -7,7 +7,7 @@ import type { AtribuicaoRecord } from '@/types'
 import { AreaBadge } from '@/components/AreaBadge'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
-import { CheckCircle2, Clock, MinusCircle, Camera, Calendar, X } from 'lucide-react'
+import { CheckCircle2, Clock, MinusCircle, Camera, Calendar, X, Video } from 'lucide-react'
 
 export default function Historico() {
   const { user } = useAuth()
@@ -15,6 +15,7 @@ export default function Historico() {
   const [historico, setHistorico] = useState<AtribuicaoRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [lightboxFotoUrl, setLightboxFotoUrl] = useState<string | null>(null)
+  const [lightboxEhVideo, setLightboxEhVideo] = useState(false)
 
   const loadHistorico = async () => {
     if (!user) return
@@ -148,6 +149,7 @@ export default function Historico() {
                       const processo = tarefa?.expand?.processo
 
                       const fotoUrl = item.foto ? usersService.getFileUrl(item, item.foto) : null
+                      const videoUrl = item.video ? usersService.getFileUrl(item, item.video) : null
 
                       return (
                         <div
@@ -184,11 +186,27 @@ export default function Historico() {
                             </div>
                           </div>
 
-                          {/* Foto thumbnail */}
-                          {fotoUrl && (
+                          {/* Evidência (foto ou vídeo) */}
+                          {videoUrl && (
                             <button
                               type="button"
-                              onClick={() => setLightboxFotoUrl(fotoUrl)}
+                              onClick={() => {
+                                setLightboxEhVideo(true)
+                                setLightboxFotoUrl(videoUrl)
+                              }}
+                              title="Assistir vídeo da tarefa"
+                              className="w-12 h-12 rounded-xl overflow-hidden border border-[#E0447C]/40 shrink-0 hover:scale-105 transition cursor-pointer flex items-center justify-center bg-[#3B2B2B]"
+                            >
+                              <Video className="w-5 h-5 text-white" />
+                            </button>
+                          )}
+                          {!videoUrl && fotoUrl && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setLightboxEhVideo(false)
+                                setLightboxFotoUrl(fotoUrl)
+                              }}
                               className="w-12 h-12 rounded-xl overflow-hidden border border-[#E0447C]/40 shrink-0 hover:scale-105 transition cursor-pointer"
                             >
                               <img
@@ -222,11 +240,21 @@ export default function Historico() {
             >
               <X className="w-5 h-5" />
             </button>
-            <img
-              src={lightboxFotoUrl}
-              alt="Evidência ampliada"
-              className="w-full h-auto max-h-[80vh] object-contain rounded-2xl"
-            />
+            {lightboxEhVideo ? (
+              <video
+                src={lightboxFotoUrl}
+                controls
+                autoPlay
+                playsInline
+                className="w-full h-auto max-h-[80vh] rounded-2xl bg-black"
+              />
+            ) : (
+              <img
+                src={lightboxFotoUrl}
+                alt="Evidência ampliada"
+                className="w-full h-auto max-h-[80vh] object-contain rounded-2xl"
+              />
+            )}
           </div>
         </div>
       )}

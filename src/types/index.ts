@@ -20,7 +20,7 @@ export interface UserRecord {
 export type AreaProcesso = 'Cozinha' | 'Loja' | 'Caixa' | 'Limpeza' | 'Estoque'
 
 export type RecorrenciaTipo = 'nenhuma' | 'diaria' | 'dias_semana' | 'semanal'
-export type TipoRegistro = 'nenhum' | 'foto' | 'medicao' | 'texto'
+export type TipoRegistro = 'nenhum' | 'foto' | 'video' | 'medicao' | 'texto'
 
 export interface ProcessoRecord {
   id: string
@@ -83,6 +83,7 @@ export interface AtribuicaoRecord extends RecordModel {
   concluida_em?: string
   observacao?: string
   foto?: string
+  video?: string
   horario_limite?: string
   medicao_valor?: number
   fora_padrao?: boolean

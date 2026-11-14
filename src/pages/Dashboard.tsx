@@ -42,6 +42,7 @@ import {
   RefreshCw,
   Trophy,
   EyeOff,
+  Video,
 } from 'lucide-react'
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts'
 
@@ -1048,8 +1049,16 @@ export default function Dashboard() {
                           </div>
                         </div>
 
-                        {/* Indicadores laterais (Foto / Obs / Status) */}
+                        {/* Indicadores laterais (Foto / Vídeo / Obs / Status) */}
                         <div className="flex items-center gap-2 shrink-0">
+                          {atrib.video && (
+                            <span
+                              className="p-1 rounded-md bg-[#3B2B2B]/10 text-[#3B2B2B]"
+                              title="Possui vídeo anexado"
+                            >
+                              <Video className="w-4 h-4" />
+                            </span>
+                          )}
                           {atrib.foto && (
                             <span
                               className="p-1 rounded-md bg-[#FFF3E8] text-[#E0447C]"
@@ -1179,6 +1188,20 @@ export default function Dashboard() {
                   <VereditoDetalhe
                     veredito={selectedTaskDetail.foto_veredito}
                     comentario={selectedTaskDetail.foto_comentario}
+                  />
+                </div>
+              )}
+
+              {selectedTaskDetail.video && (
+                <div className="pt-2">
+                  <span className="text-xs font-bold text-[#8A6F6F] block mb-2">
+                    Vídeo de Evidência:
+                  </span>
+                  <video
+                    src={usersService.getFileUrl(selectedTaskDetail, selectedTaskDetail.video)}
+                    controls
+                    playsInline
+                    className="w-full max-h-72 rounded-2xl border border-[#F2A65A]/30 bg-black"
                   />
                 </div>
               )}

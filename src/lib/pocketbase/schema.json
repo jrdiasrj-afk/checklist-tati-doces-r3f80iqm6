@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-14T22:06:15.471Z",
+  "generatedAt": "2026-11-14T22:27:16.920Z",
   "collections": [
     {
       "name": "users",
@@ -253,7 +253,7 @@
           "type": "select",
           "required": false,
           "system": false,
-          "selectValues": ["nenhum", "foto", "medicao", "texto"]
+          "selectValues": ["nenhum", "foto", "medicao", "texto", "video"]
         },
         {
           "name": "medicao_alvo",
@@ -383,6 +383,12 @@
         {
           "name": "foto_conferida_em",
           "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "video",
+          "type": "file",
           "required": false,
           "system": false
         }

@@ -46,13 +46,15 @@ export const atribuicoesService = {
       status: AtribuicaoStatus
       observacao?: string
       fotoFile?: File | null
+      videoFile?: File | null
       concluida_em?: string
       medicao_valor?: number
       fora_padrao?: boolean
     },
   ) {
-    const temAnexo = !!payload.fotoFile
-    if (temAnexo) {
+    const campoAnexo = payload.videoFile ? 'video' : 'foto'
+    const anexoFile = payload.videoFile || payload.fotoFile
+    if (anexoFile) {
       const formData = new FormData()
       formData.append('status', payload.status)
       if (payload.observacao !== undefined) formData.append('observacao', payload.observacao)
@@ -61,7 +63,7 @@ export const atribuicoesService = {
         formData.append('medicao_valor', String(payload.medicao_valor))
       if (payload.fora_padrao !== undefined)
         formData.append('fora_padrao', String(payload.fora_padrao))
-      formData.append('foto', payload.fotoFile)
+      formData.append(campoAnexo, anexoFile)
       return pb.collection<AtribuicaoRecord>('atribuicoes').update(id, formData)
     }
 
@@ -85,15 +87,16 @@ export const atribuicoesService = {
       concluida_em: '',
       observacao: '',
       foto: '',
+      video: '',
       foto_veredito: '',
       foto_comentario: '',
     })
   },
 
-  /** Reenvio da foto após reprovação — mantém concluída e dispara nova conferência IA */
-  async reenviarFoto(id: string, fotoFile: File) {
+  /** Reenvio da evidência (foto ou vídeo) após reprovação — mantém concluída e dispara nova conferência IA */
+  async reenviarEvidencia(id: string, arquivo: File) {
     const formData = new FormData()
-    formData.append('foto', fotoFile)
+    formData.append(arquivo.type.startsWith('video/') ? 'video' : 'foto', arquivo)
     return pb.collection<AtribuicaoRecord>('atribuicoes').update(id, formData)
   },
 
