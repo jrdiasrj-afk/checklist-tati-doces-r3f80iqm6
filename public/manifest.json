@@ -1,0 +1,22 @@
+{
+  "short_name": "Tati Check",
+  "name": "Tati Check — Gestão de Processos",
+  "description": "Sistema de checklist e gestão de processos para a Tati Doces",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/hoje",
+  "background_color": "#FFF9F2",
+  "theme_color": "#E0447C",
+  "display": "standalone",
+  "orientation": "portrait"
+}

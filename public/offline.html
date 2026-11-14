@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sem conexão — Tati Check</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 24px;
+        font-family: 'Nunito Sans', sans-serif;
+        background-color: #fff9f2;
+        color: #3b2b2b;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 100vh;
+        text-align: center;
+      }
+      .card {
+        background: #ffffff;
+        padding: 32px 24px;
+        border-radius: 20px;
+        box-shadow: 0 4px 16px rgba(59, 43, 43, 0.08);
+        max-width: 360px;
+      }
+      .icon {
+        font-size: 48px;
+        margin-bottom: 16px;
+      }
+      h1 {
+        font-size: 22px;
+        color: #e0447c;
+        margin: 0 0 12px 0;
+      }
+      p {
+        font-size: 15px;
+        color: #8a6f6f;
+        line-height: 1.5;
+        margin: 0;
+      }
+      button {
+        margin-top: 24px;
+        background: #e0447c;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 999px;
+        font-size: 15px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="icon">🧁</div>
+      <h1>Sem conexão</h1>
+      <p>Você está offline no momento. As tarefas serão atualizadas assim que a conexão voltar.</p>
+      <button onclick="window.location.reload()">Tentar novamente</button>
+    </div>
+  </body>
+</html>
