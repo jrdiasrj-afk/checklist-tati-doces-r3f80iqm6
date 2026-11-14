@@ -1,11 +1,16 @@
 export type UserRole = 'gerente' | 'colaborador'
 
+import type { LocalValue } from '@/lib/locais'
+export type { LocalValue }
+
 export interface UserRecord {
   id: string
   email: string
   name?: string
   avatar?: string
   role: UserRole
+  local?: LocalValue
+  supervisor?: string
   created: string
   updated: string
 }
@@ -22,6 +27,7 @@ export interface ProcessoRecord {
   area: AreaProcesso
   ativo: boolean
   criado_por?: string
+  local?: LocalValue
   recorrencia?: RecorrenciaTipo
   dias_semana?: number[] // 0=dom ... 6=sáb
   horario_limite?: string // 'HH:mm'
@@ -84,6 +90,29 @@ export interface AtribuicaoRecord extends RecordModel {
       }
     }
     colaborador?: UserRecord
+  }
+  [key: string]: any
+}
+
+export type AlertaTipo = 'fora_prazo' | 'fim_dia'
+
+export interface AlertaRecord extends RecordModel {
+  id: string
+  collectionId: string
+  collectionName: string
+  colaborador: string
+  supervisor?: string
+  atribuicao: string
+  local?: LocalValue
+  tipo: AlertaTipo
+  mensagem?: string
+  criado_em: string
+  created: string
+  updated: string
+  expand?: {
+    colaborador?: UserRecord
+    supervisor?: UserRecord
+    atribuicao?: AtribuicaoRecord
   }
   [key: string]: any
 }

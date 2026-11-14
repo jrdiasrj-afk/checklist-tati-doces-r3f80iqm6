@@ -3,10 +3,18 @@ import { MainLayout } from '@/components/MainLayout'
 import { usersService } from '@/services/users'
 import { atribuicoesService } from '@/services/atribuicoes'
 import type { UserRecord, UserRole } from '@/types'
+import { LOCAIS, LOCAL_LABELS, localLabel, type LocalValue } from '@/lib/locais'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { toast } from 'sonner'
-import { ShieldCheck, UserCheck, AlertTriangle } from 'lucide-react'
+import { ShieldCheck, UserCheck, AlertTriangle, MapPin, Pencil } from 'lucide-react'
 
 export default function Equipe() {
   const [users, setUsers] = useState<UserRecord[]>([])
@@ -21,6 +29,14 @@ export default function Equipe() {
     newRole: UserRole
   } | null>(null)
   const [changing, setChanging] = useState(false)
+
+  // Modal de edição de local/supervisor
+  const [editModal, setEditModal] = useState<{
+    user: UserRecord
+    local: string
+    supervisor: string
+  } | null>(null)
+  const [savingEdit, setSavingEdit] = useState(false)
 
   const loadEquipe = async () => {
     setLoading(true)
@@ -86,6 +102,49 @@ export default function Equipe() {
     }
   }
 
+  const openEditModal = (colab: UserRecord) => {
+    setEditModal({
+      user: colab,
+      local: colab.local || '',
+      supervisor: colab.supervisor || '',
+    })
+  }
+
+  const handleSaveEdit = async () => {
+    if (!editModal) return
+    setSavingEdit(true)
+    try {
+      const updated = await usersService.updateLocalSupervisor(editModal.user.id, {
+        local: (editModal.local || '') as LocalValue | '',
+        supervisor: editModal.supervisor || '',
+      })
+      setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)))
+      toast.success('Dados do colaborador atualizados!')
+      setEditModal(null)
+      loadEquipe()
+    } catch (err: any) {
+      toast.error(err?.data?.message || err?.message || 'Não foi possível salvar os dados.')
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
+  // Supervisores possíveis: gerentes do mesmo local do colaborador em edição
+  const supervisoresPossiveis = editModal
+    ? users.filter(
+        (u) =>
+          u.role === 'gerente' &&
+          u.id !== editModal.user.id &&
+          (!editModal.local || !u.local || u.local === editModal.local),
+      )
+    : []
+
+  const nomeSupervisor = (supId?: string) => {
+    if (!supId) return null
+    const sup = users.find((u) => u.id === supId)
+    return sup ? sup.name || sup.email : null
+  }
+
   return (
     <MainLayout title="Gestão da Equipe">
       <div className="bg-white rounded-3xl p-6 sm:p-8 border border-[#F2A65A]/20 shadow-xs">
@@ -94,8 +153,8 @@ export default function Equipe() {
             Colaboradores Cadastrados
           </h2>
           <p className="text-xs text-[#8A6F6F] mt-1">
-            Gerencie as permissões e veja o desempenho operacional dos últimos 30 dias de cada
-            membro.
+            Gerencie local, supervisor e permissões; veja o desempenho operacional dos últimos 30
+            dias de cada membro.
           </p>
         </div>
 
@@ -125,7 +184,7 @@ export default function Equipe() {
                     </Avatar>
 
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <h4 className="font-display font-bold text-[#3B2B2B] text-base">
                           {colab.name || 'Sem nome'}
                         </h4>
@@ -138,8 +197,18 @@ export default function Equipe() {
                         >
                           {colab.role}
                         </span>
+                        {colab.local && (
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#FFF3E8] text-[#C96B16] border border-[#F2A65A]/30 flex items-center gap-1">
+                            <MapPin className="w-2.5 h-2.5" /> {localLabel(colab.local)}
+                          </span>
+                        )}
                       </div>
                       <p className="text-xs text-[#8A6F6F] mt-0.5">{colab.email}</p>
+                      <p className="text-[11px] text-[#8A6F6F] mt-0.5">
+                        {nomeSupervisor(colab.supervisor)
+                          ? `Supervisor: ${nomeSupervisor(colab.supervisor)}`
+                          : 'Sem supervisor definido'}
+                      </p>
                     </div>
                   </div>
 
@@ -153,29 +222,39 @@ export default function Equipe() {
                       </p>
                     </div>
 
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() =>
-                        setConfirmModal({
-                          user: colab,
-                          newRole: isGerente ? 'colaborador' : 'gerente',
-                        })
-                      }
-                      className="rounded-full border-[#F2A65A]/40 text-[#3B2B2B] hover:bg-[#FFF3E8] text-xs font-bold"
-                    >
-                      {isGerente ? (
-                        <>
-                          <UserCheck className="w-3.5 h-3.5 mr-1 text-[#F2A65A]" /> Mudar p/
-                          Colaborador
-                        </>
-                      ) : (
-                        <>
-                          <ShieldCheck className="w-3.5 h-3.5 mr-1 text-[#E0447C]" /> Promover a
-                          Gerente
-                        </>
-                      )}
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openEditModal(colab)}
+                        className="rounded-full border-[#F2A65A]/40 text-[#3B2B2B] hover:bg-[#FFF3E8] text-xs font-bold"
+                      >
+                        <Pencil className="w-3.5 h-3.5 mr-1 text-[#F2A65A]" /> Editar
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setConfirmModal({
+                            user: colab,
+                            newRole: isGerente ? 'colaborador' : 'gerente',
+                          })
+                        }
+                        className="rounded-full border-[#F2A65A]/40 text-[#3B2B2B] hover:bg-[#FFF3E8] text-xs font-bold"
+                      >
+                        {isGerente ? (
+                          <>
+                            <UserCheck className="w-3.5 h-3.5 mr-1 text-[#F2A65A]" /> Mudar p/
+                            Colaborador
+                          </>
+                        ) : (
+                          <>
+                            <ShieldCheck className="w-3.5 h-3.5 mr-1 text-[#E0447C]" /> Promover a
+                            Gerente
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   </div>
                 </div>
               )
@@ -183,6 +262,95 @@ export default function Equipe() {
           </div>
         )}
       </div>
+
+      {/* ================= MODAL EDIÇÃO LOCAL/SUPERVISOR ================= */}
+      {editModal && (
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-sm w-full border border-[#F2A65A]/20 shadow-2xl">
+            <h3 className="text-lg font-display font-bold text-[#3B2B2B]">
+              Editar {editModal.user.name || 'colaborador'}
+            </h3>
+            <p className="text-xs text-[#8A6F6F] mt-1 mb-5">
+              Defina o local de operação e o supervisor responsável (usados nos alertas de tarefas
+              não concluídas).
+            </p>
+
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-[#3B2B2B]">
+                  Local
+                </label>
+                <Select
+                  value={editModal.local}
+                  onValueChange={(val) =>
+                    setEditModal((m) => (m ? { ...m, local: val, supervisor: '' } : m))
+                  }
+                >
+                  <SelectTrigger className="h-11 rounded-xl bg-[#FFF9F2]/60 border-[#F2A65A]/30 focus-visible:ring-[#E0447C]">
+                    <SelectValue placeholder="Selecione o local" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LOCAIS.map((l: LocalValue) => (
+                      <SelectItem key={l} value={l}>
+                        {LOCAL_LABELS[l]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-[#3B2B2B]">
+                  Supervisor
+                </label>
+                <Select
+                  value={editModal.supervisor}
+                  onValueChange={(val) => setEditModal((m) => (m ? { ...m, supervisor: val } : m))}
+                >
+                  <SelectTrigger className="h-11 rounded-xl bg-[#FFF9F2]/60 border-[#F2A65A]/30 focus-visible:ring-[#E0447C]">
+                    <SelectValue
+                      placeholder={
+                        supervisoresPossiveis.length
+                          ? 'Selecione o supervisor'
+                          : 'Nenhum gerente disponível'
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {supervisoresPossiveis.map((u) => (
+                      <SelectItem key={u.id} value={u.id}>
+                        {u.name || u.email}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-[#8A6F6F]">
+                  Gerentes do mesmo local aparecem como opção.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setEditModal(null)}
+                className="rounded-full border-stone-300 text-xs font-semibold"
+              >
+                Cancelar
+              </Button>
+              <Button
+                size="sm"
+                disabled={savingEdit || !editModal.local}
+                onClick={handleSaveEdit}
+                className="rounded-full bg-[#E0447C] hover:bg-[#C23066] text-white text-xs font-bold"
+              >
+                {savingEdit ? 'Salvando...' : 'Salvar'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ================= MODAL CONFIRMAÇÃO TROCA DE ROLE ================= */}
       {confirmModal && (

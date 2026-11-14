@@ -4,6 +4,14 @@ import { MainLayout } from '@/components/MainLayout'
 import { processosService } from '@/services/processos'
 import type { ProcessoRecord, AreaProcesso } from '@/types'
 import { AreaBadge } from '@/components/AreaBadge'
+import {
+  LOCAIS,
+  LOCAL_LABELS,
+  LOCAL_COLORS,
+  localLabel,
+  isLocalValue,
+  type LocalValue,
+} from '@/lib/locais'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -40,6 +48,7 @@ export default function Processos() {
   const [nome, setNome] = useState('')
   const [descricao, setDescricao] = useState('')
   const [area, setArea] = useState<AreaProcesso>('Loja')
+  const [local, setLocal] = useState<LocalValue | ''>('')
   const [ativo, setAtivo] = useState(true)
   const [recorrencia, setRecorrencia] = useState<RecorrenciaState>(recorrenciaInicial)
   const [colaboradores, setColaboradores] = useState<UserRecord[]>([])
@@ -91,6 +100,7 @@ export default function Processos() {
         nome: nome.trim(),
         descricao: descricao.trim(),
         area,
+        local: local || '',
         ativo,
         recorrencia: recorrencia.recorrencia,
         dias_semana: recorrencia.recorrencia === 'dias_semana' ? recorrencia.dias_semana : [],
@@ -103,6 +113,7 @@ export default function Processos() {
       setNome('')
       setDescricao('')
       setArea('Loja')
+      setLocal('')
       setAtivo(true)
       setRecorrencia(recorrenciaInicial)
       // Redireciona diretamente para cadastrar tarefas
@@ -182,7 +193,18 @@ export default function Processos() {
             >
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <AreaBadge area={proc.area} />
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <AreaBadge area={proc.area} />
+                    {isLocalValue(proc.local) && (
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                          LOCAL_COLORS[proc.local].bg
+                        } ${LOCAL_COLORS[proc.local].text} ${LOCAL_COLORS[proc.local].border}`}
+                      >
+                        {localLabel(proc.local)}
+                      </span>
+                    )}
+                  </div>
                   <div
                     onClick={(e) => e.stopPropagation()}
                     className="flex items-center gap-2"
@@ -265,6 +287,30 @@ export default function Processos() {
                   onChange={(e) => setNome(e.target.value)}
                   className="h-11 rounded-xl bg-[#FFF9F2]/60 border-[#F2A65A]/30 focus-visible:ring-[#E0447C]"
                 />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="local"
+                  className="text-xs font-bold uppercase tracking-wider text-[#3B2B2B]"
+                >
+                  Local de operação
+                </Label>
+                <Select value={local} onValueChange={(val) => setLocal(val as LocalValue)}>
+                  <SelectTrigger className="h-11 rounded-xl bg-[#FFF9F2]/60 border-[#F2A65A]/30 focus-visible:ring-[#E0447C]">
+                    <SelectValue placeholder="Selecione o local (opcional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LOCAIS.map((l) => (
+                      <SelectItem key={l} value={l}>
+                        {LOCAL_LABELS[l]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-[#8A6F6F]">
+                  Unidade onde este checklist é executado. Usado nos filtros e alertas.
+                </p>
               </div>
 
               <div className="space-y-1.5">

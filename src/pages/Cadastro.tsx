@@ -4,8 +4,16 @@ import pb from '@/lib/pocketbase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { toast } from 'sonner'
 import { ArrowLeft, CheckCircle2 } from 'lucide-react'
+import { LOCAIS, LOCAL_LABELS, type LocalValue } from '@/lib/locais'
 
 export default function Cadastro() {
   const navigate = useNavigate()
@@ -13,6 +21,7 @@ export default function Cadastro() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [passwordConfirm, setPasswordConfirm] = useState('')
+  const [local, setLocal] = useState<LocalValue | ''>('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
@@ -38,6 +47,7 @@ export default function Cadastro() {
         password,
         passwordConfirm,
         role: 'colaborador',
+        local: local || '',
       })
 
       // Disparar e-mail de verificação
@@ -149,6 +159,30 @@ export default function Cadastro() {
               onChange={(e) => setEmail(e.target.value)}
               className="h-11 rounded-xl bg-[#FFF9F2]/60 border-[#F2A65A]/30 focus-visible:ring-[#E0447C]"
             />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label
+              htmlFor="local"
+              className="text-xs font-bold uppercase tracking-wider text-[#3B2B2B]"
+            >
+              Local de operação
+            </Label>
+            <Select value={local} onValueChange={(val) => setLocal(val as LocalValue)}>
+              <SelectTrigger className="h-11 rounded-xl bg-[#FFF9F2]/60 border-[#F2A65A]/30 focus-visible:ring-[#E0447C]">
+                <SelectValue placeholder="Selecione o local (opcional)" />
+              </SelectTrigger>
+              <SelectContent>
+                {LOCAIS.map((l) => (
+                  <SelectItem key={l} value={l}>
+                    {LOCAL_LABELS[l]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] text-[#8A6F6F]">
+              Usado para filtrar as tarefas da sua unidade. Pode ser alterado depois pelo gerente.
+            </p>
           </div>
 
           <div className="space-y-1.5">

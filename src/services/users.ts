@@ -1,5 +1,5 @@
 import pb from '@/lib/pocketbase/client'
-import type { UserRecord } from '@/types'
+import type { LocalValue, UserRecord } from '@/types'
 
 export const usersService = {
   async list() {
@@ -15,6 +15,17 @@ export const usersService = {
   async updateRole(id: string, role: 'gerente' | 'colaborador') {
     // Gerente atualiza role de outro usuário
     return pb.collection<UserRecord>('users').update(id, { role })
+  },
+
+  /** Gerente define local e supervisor de um usuário */
+  async updateLocalSupervisor(
+    id: string,
+    data: { local?: LocalValue | ''; supervisor?: string | '' },
+  ) {
+    return pb.collection<UserRecord>('users').update(id, {
+      local: data.local || '',
+      supervisor: data.supervisor || '',
+    })
   },
 
   async updateProfile(id: string, data: { name?: string; avatarFile?: File | null }) {

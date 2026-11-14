@@ -4,6 +4,7 @@ import { MainLayout } from '@/components/MainLayout'
 import { atribuicoesService } from '@/services/atribuicoes'
 import { usersService } from '@/services/users'
 import { processosService } from '@/services/processos'
+import { alertasService } from '@/services/alertas'
 import { useRealtime } from '@/hooks/use-realtime'
 import {
   estaAtrasada,
@@ -11,7 +12,8 @@ import {
   indicadoresDia,
   type Indicadores,
 } from '@/services/indicadores'
-import type { AtribuicaoRecord, UserRecord, ProcessoRecord } from '@/types'
+import type { AtribuicaoRecord, UserRecord, ProcessoRecord, AlertaRecord } from '@/types'
+import { LOCAIS, LOCAL_LABELS, localLabel, isLocalValue, type LocalValue } from '@/lib/locais'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -36,6 +38,8 @@ import {
   Zap,
   Thermometer,
   Timer,
+  Bell,
+  RefreshCw,
 } from 'lucide-react'
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts'
 
@@ -87,13 +91,16 @@ export default function Dashboard() {
   })
   const [selectedColab, setSelectedColab] = useState<string>('todos')
   const [selectedArea, setSelectedArea] = useState<string>('todas')
+  const [selectedLocal, setSelectedLocal] = useState<string>('todos')
   const [statusFilter, setStatusFilter] = useState<string | null>(null)
 
   // Dados
   const [atribuicoes, setAtribuicoes] = useState<AtribuicaoRecord[]>([])
   const [atrasadasTotal, setAtrasadasTotal] = useState(0)
+  const [atrasadasPorLocal, setAtrasadasPorLocal] = useState<Map<string, number>>(new Map())
   const [colaboradores, setColaboradores] = useState<UserRecord[]>([])
   const [processos, setProcessos] = useState<ProcessoRecord[]>([])
+  const [alertas, setAlertas] = useState<AlertaRecord[]>([])
   const [loading, setLoading] = useState(true)
 
   // Drawer de Detalhe da Tarefa
@@ -106,12 +113,14 @@ export default function Dashboard() {
   useEffect(() => {
     const loadFilters = async () => {
       try {
-        const [usersList, procList] = await Promise.all([
+        const [usersList, procList, alertasList] = await Promise.all([
           usersService.list(),
           processosService.list(),
+          alertasService.list(),
         ])
         setColaboradores(usersList)
         setProcessos(procList)
+        setAlertas(alertasList)
       } catch (err) {
         console.error('Erro ao carregar filtros:', err)
       }
@@ -139,8 +148,16 @@ export default function Dashboard() {
           status: 'pendente',
         })
         setAtrasadasTotal(pastPending.length)
+        // Contagem de atrasadas por local (para o filtro de local)
+        const porLocal = new Map<string, number>()
+        pastPending.forEach((a) => {
+          const loc = a.expand?.tarefa?.expand?.processo?.local || 'sem_local'
+          porLocal.set(loc, (porLocal.get(loc) || 0) + 1)
+        })
+        setAtrasadasPorLocal(porLocal)
       } else {
         setAtrasadasTotal(0)
+        setAtrasadasPorLocal(new Map())
       }
     } catch (err) {
       console.error('Erro ao carregar dados do dia:', err)
@@ -171,6 +188,11 @@ export default function Dashboard() {
       if (statusFilter && item.status !== statusFilter) {
         return false
       }
+      // Filtro de local (pelo processo da tarefa)
+      if (selectedLocal !== 'todos') {
+        const local = item.expand?.tarefa?.expand?.processo?.local
+        if (local !== selectedLocal) return false
+      }
       // Filtro de área
       if (selectedArea !== 'todas') {
         const area = item.expand?.tarefa?.expand?.processo?.area
@@ -178,7 +200,7 @@ export default function Dashboard() {
       }
       return true
     })
-  }, [atribuicoes, statusFilter, selectedArea])
+  }, [atribuicoes, statusFilter, selectedLocal, selectedArea])
 
   // KPIs
   const kpis = useMemo(() => {
@@ -188,8 +210,16 @@ export default function Dashboard() {
     const naoAplicaveis = atribuicoes.filter((a) => a.status === 'nao_aplicavel').length
     const taxa = total > 0 ? Math.round((concluidas / total) * 100) : 0
 
-    return { total, concluidas, pendentes, naoAplicaveis, taxa, atrasadas: atrasadasTotal }
-  }, [atribuicoes, atrasadasTotal])
+    return {
+      total,
+      concluidas,
+      pendentes,
+      naoAplicaveis,
+      taxa,
+      atrasadas:
+        selectedLocal === 'todos' ? atrasadasTotal : atrasadasPorLocal.get(selectedLocal) || 0,
+    }
+  }, [atribuicoes, atrasadasTotal, atrasadasPorLocal, selectedLocal])
 
   // Dados do gráfico donut
   const chartData = useMemo(() => {
@@ -211,6 +241,27 @@ export default function Dashboard() {
     () => indicadoresDia(atribuicoes, new Date()),
     [atribuicoes],
   )
+
+  // Alertas do sistema (coleção alertas) filtrados pelo local selecionado
+  const [verificando, setVerificando] = useState(false)
+
+  const alertasFiltrados = useMemo(() => {
+    if (selectedLocal === 'todos') return alertas
+    return alertas.filter((al) => al.local === selectedLocal)
+  }, [alertas, selectedLocal])
+
+  const handleVerificarAlertas = async () => {
+    setVerificando(true)
+    try {
+      await alertasService.verificar()
+      const list = await alertasService.list()
+      setAlertas(list)
+    } catch (err) {
+      console.error('Erro ao verificar alertas:', err)
+    } finally {
+      setVerificando(false)
+    }
+  }
 
   // Alertas de itens críticos pendentes/atrasados, com responsável e atraso
   const alertasCriticos = useMemo(() => {
@@ -280,6 +331,22 @@ export default function Dashboard() {
           />
         </div>
 
+        <div className="w-40">
+          <Select value={selectedLocal} onValueChange={setSelectedLocal}>
+            <SelectTrigger className="h-10 rounded-xl bg-[#FFF9F2]/50 border-[#F2A65A]/30 text-xs font-semibold">
+              <SelectValue placeholder="Local" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos os locais</SelectItem>
+              {LOCAIS.map((l) => (
+                <SelectItem key={l} value={l}>
+                  {LOCAL_LABELS[l]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
         <div className="w-44">
           <Select value={selectedColab} onValueChange={setSelectedColab}>
             <SelectTrigger className="h-10 rounded-xl bg-[#FFF9F2]/50 border-[#F2A65A]/30 text-xs font-semibold">
@@ -323,6 +390,67 @@ export default function Dashboard() {
           </Button>
         )}
       </div>
+
+      {/* ================= ALERTAS DO SISTEMA (coleção alertas: fora_prazo / fim_dia) ================= */}
+      {alertasFiltrados.length > 0 && (
+        <div className="mb-6 rounded-2xl border border-[#B77A0A]/30 bg-[#FFFBEB] p-4 sm:p-5">
+          <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <Bell className="w-4 h-4 text-[#B77A0A]" />
+              <h2 className="text-sm font-display font-bold text-[#B77A0A]">
+                Alertas aos supervisores ({alertasFiltrados.length})
+              </h2>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={verificando}
+              onClick={handleVerificarAlertas}
+              className="rounded-full border-[#B77A0A]/40 text-[#B77A0A] hover:bg-[#B77A0A]/10 text-xs font-bold"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 mr-1 ${verificando ? 'animate-spin' : ''}`} />
+              Verificar agora
+            </Button>
+          </div>
+          <p className="text-xs text-[#8A6F6F] mb-3">
+            Notificações geradas para o supervisor quando uma tarefa passa do horário-limite ou
+            segue pendente no fim do dia.
+          </p>
+          <div className="space-y-2">
+            {alertasFiltrados.slice(0, 6).map((al) => (
+              <div
+                key={al.id}
+                className="flex items-start gap-3 bg-white rounded-xl px-3 py-2.5 border border-[#B77A0A]/20"
+              >
+                <span
+                  className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+                    al.tipo === 'fora_prazo'
+                      ? 'bg-[#E5484D]/15 text-[#E5484D]'
+                      : 'bg-[#F5B841]/15 text-[#B77A0A]'
+                  }`}
+                >
+                  <Clock className="w-4 h-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm text-[#3B2B2B]">{al.mensagem || 'Sem mensagem'}</p>
+                  <p className="text-[11px] text-[#8A6F6F] mt-0.5">
+                    {alertasService.tipoLabel(al.tipo)}
+                    {al.expand?.supervisor?.name || al.expand?.supervisor?.email
+                      ? ` · supervisor: ${al.expand?.supervisor?.name || al.expand?.supervisor?.email}`
+                      : ' · sem supervisor'}
+                    {isLocalValue(al.local) ? ` · ${localLabel(al.local)}` : ''}
+                  </p>
+                </div>
+              </div>
+            ))}
+            {alertasFiltrados.length > 6 && (
+              <p className="text-[11px] text-[#8A6F6F] pl-1">
+                + {alertasFiltrados.length - 6} outros alertas…
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ================= ALERTAS (críticos + atrasados com responsável) ================= */}
       {alertasCriticos.length > 0 && (

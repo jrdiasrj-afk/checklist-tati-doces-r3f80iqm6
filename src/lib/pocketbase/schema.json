@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-14T19:24:21.238Z",
+  "generatedAt": "2026-11-14T19:58:15.680Z",
   "collections": [
     {
       "name": "users",
@@ -44,6 +44,20 @@
           "required": true,
           "system": false,
           "selectValues": ["gerente", "colaborador"]
+        },
+        {
+          "name": "local",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["fabrica", "barao", "uruguai", "meier"]
+        },
+        {
+          "name": "supervisor",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
         }
       ],
       "indexes": [
@@ -139,6 +153,13 @@
           "required": false,
           "system": false,
           "collectionRef": "users"
+        },
+        {
+          "name": "local",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["fabrica", "barao", "uruguai", "meier"]
         }
       ],
       "indexes": [
@@ -339,6 +360,71 @@
         "CREATE INDEX idx_atribuicoes_data ON atribuicoes (data)",
         "CREATE INDEX idx_atribuicoes_colaborador ON atribuicoes (colaborador)",
         "CREATE INDEX idx_atribuicoes_status ON atribuicoes (status)"
+      ]
+    },
+    {
+      "name": "alertas",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": null,
+        "update": null,
+        "delete": null
+      },
+      "fields": [
+        {
+          "name": "colaborador",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "supervisor",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "atribuicao",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "atribuicoes"
+        },
+        {
+          "name": "local",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["fabrica", "barao", "uruguai", "meier"]
+        },
+        {
+          "name": "tipo",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["fora_prazo", "fim_dia"]
+        },
+        {
+          "name": "mensagem",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "criado_em",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_alertas_atribuicao_tipo ON alertas (atribuicao, tipo)",
+        "CREATE INDEX idx_alertas_local ON alertas (local)"
       ]
     }
   ]
