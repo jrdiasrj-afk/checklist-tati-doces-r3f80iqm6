@@ -146,7 +146,7 @@ export interface AtribuicaoInput {
   foto?: string
   expand?: {
     tarefa?: TarefaRecord
-    colaborador?: { id: string; name: string; email: string }
+    colaborador?: { id: string; name?: string; email: string }
   }
 }
 
