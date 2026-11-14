@@ -67,6 +67,9 @@ export interface TarefaRecord {
 
 export type AtribuicaoStatus = 'pendente' | 'concluida' | 'nao_aplicavel'
 
+/** Veredito da conferência IA da foto de evidência (fiscal-foto) */
+export type FotoVeredito = 'aprovado' | 'duvidoso' | 'reprovado' | 'erro'
+
 import type { RecordModel } from 'pocketbase'
 
 export interface AtribuicaoRecord extends RecordModel {
@@ -83,6 +86,9 @@ export interface AtribuicaoRecord extends RecordModel {
   horario_limite?: string
   medicao_valor?: number
   fora_padrao?: boolean
+  foto_veredito?: FotoVeredito | ''
+  foto_comentario?: string
+  foto_conferida_em?: string
   created: string
   updated: string
   expand?: {

@@ -9,6 +9,7 @@ import type { AtribuicaoRecord } from '@/types'
 import { estaAtrasada, parseLimite } from '@/services/indicadores'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { VereditoBadge, VereditoDetalhe } from '@/components/VereditoFoto'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
@@ -28,6 +29,9 @@ import {
 
 const TIPO_LIMITE_MENCIONA = (limite?: string) => (limite ? `Limite: ${limite.slice(0, 5)}` : '')
 
+/** O gerente pode reaproveitar o veredito anterior ou o item volta a pendente */
+type AcaoReprovada = 'reenviar' | 'voltar_pendente'
+
 /** Uma tarefa pede foto quando o gerente marcou registro 'foto' ou evidência obrigatória */
 const tarefaPedeFoto = (tarefa?: AtribuicaoRecord['expand']['tarefa']) =>
   tarefa?.tipo_registro === 'foto' || !!tarefa?.evidencia_obrigatoria
@@ -41,6 +45,7 @@ export default function Hoje() {
   const [loading, setLoading] = useState(true)
   const [data, setData] = useState(() => new Date().toISOString().split('T')[0])
   const [modalAberto, setModalAberto] = useState<AtribuicaoRecord | null>(null)
+  const [reenviandoId, setReenviandoId] = useState<string | null>(null)
 
   const userId = user?.id ?? null
 
@@ -112,6 +117,30 @@ export default function Hoje() {
         confetti({ particleCount: 120, spread: 70, origin: { y: 0.7 } })
       }
       setModalAberto(null)
+      loadData()
+      if (payload.status === 'concluida' && payload.fotoFile) {
+        toast.info('Foto enviada! A conferência automática da IA acontece em instantes.')
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Erro ao atualizar o item.')
+    }
+  }
+
+  // Fluxo do colaborador quando a IA reprova a foto: reenvia foto ou volta a pendente
+  const reenviarFoto = async (a: AtribuicaoRecord, acao: AcaoReprovada, fotoFile: File | null) => {
+    try {
+      if (acao === 'voltar_pendente') {
+        await atribuicoesService.voltarPendente(a.id)
+        toast.info('Item voltou para pendente. Envie uma nova foto ao concluir.')
+      } else {
+        if (!fotoFile) {
+          toast.error('Selecione uma foto para reenviar.')
+          return
+        }
+        await atribuicoesService.reenviarFoto(a.id, fotoFile)
+        toast.success('Nova foto enviada! A conferência da IA acontece em instantes.')
+      }
+      setReenviandoId(null)
       loadData()
     } catch (err: any) {
       toast.error(err?.message || 'Erro ao atualizar o item.')
@@ -247,7 +276,17 @@ export default function Hoje() {
           </div>
           <div className="space-y-2 opacity-80">
             {concluidas.map((a) => (
-              <AtribuicaoItem key={a.id} a={a} apenasLeitura />
+              <AtribuicaoItem
+                key={a.id}
+                a={a}
+                apenasLeitura
+                onReenviarFoto={
+                  a.foto_veredito === 'reprovado' || a.foto_veredito === 'erro'
+                    ? (acao, file) => reenviarFoto(a, acao, file)
+                    : undefined
+                }
+                reenviando={reenviandoId === a.id}
+              />
             ))}
           </div>
         </div>
@@ -273,12 +312,16 @@ function AtribuicaoItem({
   apenasLeitura = false,
   onConcluir,
   onNA,
+  onReenviarFoto,
+  reenviando = false,
 }: {
   a: AtribuicaoRecord
   atrasada?: boolean
   apenasLeitura?: boolean
   onConcluir?: () => void
   onNA?: () => void
+  onReenviarFoto?: (acao: AcaoReprovada, fotoFile: File | null) => void
+  reenviando?: boolean
 }) {
   const tarefa = a.expand?.tarefa
   const processo = tarefa?.expand?.processo
@@ -287,6 +330,10 @@ function AtribuicaoItem({
   const fotoObrigatoria = tarefaExigeFoto(tarefa)
   const fotoUrl = a.foto ? usersService.getFileUrl(a, a.foto) : null
   const [lightboxFotoUrl, setLightboxFotoUrl] = useState<string | null>(null)
+  const [novaFotoFile, setNovaFotoFile] = useState<File | null>(null)
+  const veredito = a.foto_veredito || ''
+  const podeReenviar =
+    !!onReenviarFoto && (veredito === 'reprovado' || veredito === 'erro') && !reenviando
 
   return (
     <div
@@ -314,6 +361,7 @@ function AtribuicaoItem({
                 <AlertCircle className="w-2.5 h-2.5" /> Atrasada
               </span>
             )}
+            <VereditoBadge veredito={veredito} />
             {pedeFoto && !atrasada && (
               <span
                 className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
@@ -369,6 +417,64 @@ function AtribuicaoItem({
           )}
           {!fotoUrl && pedeFoto && a.status === 'concluida' && (
             <p className="text-[11px] text-[#8A6F6F] mt-1 italic">Concluída sem foto (opcional).</p>
+          )}
+
+          {/* Retorno da conferência IA para o colaborador */}
+          {veredito && (
+            <div className="mt-2 max-w-md">
+              <VereditoDetalhe veredito={veredito} comentario={a.foto_comentario} />
+            </div>
+          )}
+
+          {/* Foto reprovada/erro: colaborador reenvia foto ou volta o item a pendente */}
+          {podeReenviar && (
+            <div className="mt-3 p-3 rounded-xl border border-[#E0447C]/25 bg-[#FFF5F5] space-y-2">
+              <p className="text-xs font-bold text-[#E5484D]">
+                {veredito === 'erro'
+                  ? 'A conferência automática falhou — reenvie a foto ou volte o item a pendente.'
+                  : 'A foto não passou na conferência. Envie uma nova foto ou volte o item a pendente.'}
+              </p>
+              {veredito === 'reprovado' && (
+                <label className="flex items-center justify-center gap-2 h-16 rounded-xl border-2 border-dashed border-[#E0447C]/40 bg-white/60 cursor-pointer hover:border-[#E0447C]/60 transition">
+                  <Camera className="w-4 h-4 text-[#E0447C]" />
+                  <span className="text-xs font-semibold text-[#8A6F6F]">
+                    {novaFotoFile ? novaFotoFile.name : 'Nova foto (câmera ou galeria)'}
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    disabled={reenviando}
+                    onChange={(e) => setNovaFotoFile(e.target.files?.[0] || null)}
+                  />
+                </label>
+              )}
+              <div className="flex gap-2">
+                {veredito === 'reprovado' && (
+                  <Button
+                    size="sm"
+                    disabled={reenviando}
+                    onClick={() => {
+                      if (!novaFotoFile) return
+                      onReenviarFoto!('reenviar', novaFotoFile)
+                    }}
+                    className="h-8 rounded-full bg-[#E0447C] hover:bg-[#C23066] text-white text-[11px] font-bold px-3"
+                  >
+                    {reenviando ? 'Enviando…' : 'Reenviar foto'}
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={reenviando}
+                  onClick={() => onReenviarFoto!('voltar_pendente', null)}
+                  className="h-8 rounded-full border-[#E5484D]/40 text-[#E5484D] text-[11px] font-semibold px-3"
+                >
+                  Voltar a pendente
+                </Button>
+              </div>
+            </div>
           )}
         </div>
 

@@ -13,6 +13,7 @@ import {
   type Indicadores,
 } from '@/services/indicadores'
 import type { AtribuicaoRecord, UserRecord, AlertaRecord } from '@/types'
+import { VereditoBadge, VereditoDetalhe } from '@/components/VereditoFoto'
 import { LOCAIS, LOCAL_LABELS, localLabel, isLocalValue } from '@/lib/locais'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -1042,6 +1043,7 @@ export default function Dashboard() {
                                   Fora do padrão
                                 </span>
                               )}
+                              <VereditoBadge veredito={atrib.foto_veredito} />
                             </div>
                           </div>
                         </div>
@@ -1169,6 +1171,15 @@ export default function Dashboard() {
                   <p className="text-sm bg-[#FFF3E8]/70 p-3 rounded-xl text-[#3B2B2B] italic">
                     "{selectedTaskDetail.observacao}"
                   </p>
+                </div>
+              )}
+
+              {selectedTaskDetail.foto && selectedTaskDetail.foto_veredito && (
+                <div className="pt-2">
+                  <VereditoDetalhe
+                    veredito={selectedTaskDetail.foto_veredito}
+                    comentario={selectedTaskDetail.foto_comentario}
+                  />
                 </div>
               )}
 

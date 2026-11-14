@@ -78,6 +78,25 @@ export const atribuicoesService = {
     return pb.collection('atribuicoes').delete(id)
   },
 
+  /** Colaborador volta o item a pendente após reprovação da conferência IA */
+  async voltarPendente(id: string) {
+    return pb.collection<AtribuicaoRecord>('atribuicoes').update(id, {
+      status: 'pendente',
+      concluida_em: '',
+      observacao: '',
+      foto: '',
+      foto_veredito: '',
+      foto_comentario: '',
+    })
+  },
+
+  /** Reenvio da foto após reprovação — mantém concluída e dispara nova conferência IA */
+  async reenviarFoto(id: string, fotoFile: File) {
+    const formData = new FormData()
+    formData.append('foto', fotoFile)
+    return pb.collection<AtribuicaoRecord>('atribuicoes').update(id, formData)
+  },
+
   async bulkAssign(data: { processo_id: string; colaborador_id: string; datas: string[] }) {
     const res = await pb.send('/backend/v1/atribuicoes/bulk', {
       method: 'POST',
