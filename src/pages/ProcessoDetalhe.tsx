@@ -4,14 +4,22 @@ import { MainLayout } from '@/components/MainLayout'
 import { processosService } from '@/services/processos'
 import type { ProcessoRecord, TarefaRecord, AreaProcesso, TipoRegistro, UserRecord } from '@/types'
 
-/** Controle de foto por tarefa: mapeia para tipo_registro='foto' + evidencia_obrigatoria */
-type FotoEvidencia = 'obrigatoria' | 'opcional' | 'nenhuma'
+/** Evidência por tarefa: mapeia para tipo_registro ('sem_registro'/'foto'/'video') + evidencia_obrigatoria */
+type Evidencia =
+  | 'nenhuma'
+  | 'foto_obrigatoria'
+  | 'foto_opcional'
+  | 'video_obrigatorio'
+  | 'video_opcional'
 
-const fotoEvidenciaDaTarefa = (
+const evidenciaDaTarefa = (
   t: Pick<TarefaRecord, 'tipo_registro' | 'evidencia_obrigatoria'>,
-): FotoEvidencia => {
-  if (t.tipo_registro !== 'foto' && !t.evidencia_obrigatoria) return 'nenhuma'
-  return t.evidencia_obrigatoria ? 'obrigatoria' : 'opcional'
+): Evidencia => {
+  if (t.tipo_registro === 'video')
+    return t.evidencia_obrigatoria ? 'video_obrigatorio' : 'video_opcional'
+  if (t.tipo_registro === 'foto' || t.evidencia_obrigatoria)
+    return t.evidencia_obrigatoria ? 'foto_obrigatoria' : 'foto_opcional'
+  return 'nenhuma'
 }
 import { AreaBadge } from '@/components/AreaBadge'
 import { Button } from '@/components/ui/button'
@@ -35,6 +43,7 @@ import {
   Edit2,
   Trash2,
   Camera,
+  Video,
   Ruler,
   Type,
   Upload,
@@ -59,7 +68,7 @@ export default function ProcessoDetalhe() {
   const [editingTask, setEditingTask] = useState<TarefaRecord | null>(null)
   const [titulo, setTitulo] = useState('')
   const [descricao, setDescricao] = useState('')
-  const [fotoEvidencia, setFotoEvidencia] = useState<FotoEvidencia>('nenhuma')
+  const [evidencia, setEvidencia] = useState<Evidencia>('nenhuma')
   const [ativa, setAtiva] = useState(true)
   const [critica, setCritica] = useState(false)
   const [tipoRegistro, setTipoRegistro] = useState<TipoRegistro>('nenhum')
@@ -109,7 +118,7 @@ export default function ProcessoDetalhe() {
     setEditingTask(null)
     setTitulo('')
     setDescricao('')
-    setFotoEvidencia('nenhuma')
+    setEvidencia('nenhuma')
     setAtiva(true)
     setCritica(false)
     setTipoRegistro('nenhum')
@@ -123,7 +132,7 @@ export default function ProcessoDetalhe() {
     setEditingTask(task)
     setTitulo(task.titulo)
     setDescricao(task.descricao || '')
-    setFotoEvidencia(fotoEvidenciaDaTarefa(task))
+    setEvidencia(evidenciaDaTarefa(task))
     setAtiva(task.ativa)
     setCritica(!!task.critica)
     setTipoRegistro(task.tipo_registro || 'nenhum')
@@ -148,11 +157,16 @@ export default function ProcessoDetalhe() {
       const dadosTarefa = {
         titulo: titulo.trim(),
         descricao: descricao.trim(),
-        evidencia_obrigatoria: fotoEvidencia === 'obrigatoria',
+        // As 5 opções de evidência mapeiam em tipo_registro + evidencia_obrigatoria
+        evidencia_obrigatoria:
+          evidencia === 'foto_obrigatoria' || evidencia === 'video_obrigatorio',
         ativa,
         critica,
-        // Foto opcional/obrigatória ocupa o tipo de registro 'foto' (select único)
-        tipo_registro: (fotoEvidencia !== 'nenhuma' ? 'foto' : tipoRegistro) as TipoRegistro,
+        tipo_registro: (evidencia === 'foto_obrigatoria' || evidencia === 'foto_opcional'
+          ? 'foto'
+          : evidencia === 'video_obrigatorio' || evidencia === 'video_opcional'
+            ? 'video'
+            : tipoRegistro) as TipoRegistro,
         medicao_alvo:
           tipoRegistro === 'medicao' && medicaoAlvo !== '' ? Number(medicaoAlvo) : undefined,
         medicao_max:
@@ -389,6 +403,16 @@ export default function ProcessoDetalhe() {
                             <Camera className="w-3 h-3" /> Foto opcional
                           </span>
                         )}
+                        {task.tipo_registro === 'video' && task.evidencia_obrigatoria && (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#3B7A9C] bg-[#EAF4FA] px-2 py-0.5 rounded-full border border-[#3B7A9C]/20">
+                            <Video className="w-3 h-3" /> Vídeo Obrigatório
+                          </span>
+                        )}
+                        {task.tipo_registro === 'video' && !task.evidencia_obrigatoria && (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#2D7A51] bg-[#EDF8F1] px-2 py-0.5 rounded-full border border-[#2D7A51]/20">
+                            <Video className="w-3 h-3" /> Vídeo opcional
+                          </span>
+                        )}
                         {task.tipo_registro === 'medicao' && (
                           <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#3B7A9C] bg-[#EAF4FA] px-2 py-0.5 rounded-full border border-[#3B7A9C]/20">
                             <Thermometer className="w-3 h-3" />
@@ -602,30 +626,30 @@ export default function ProcessoDetalhe() {
                 )}
               </div>
 
-              {/* Foto de evidência */}
+              {/* Evidência: foto, vídeo ou nenhum registro */}
               <div className="p-3 rounded-xl bg-[#FFF9F2] border border-[#F2A65A]/20 space-y-3">
                 <div>
                   <p className="text-xs font-bold text-[#3B2B2B] flex items-center gap-1.5">
-                    <Camera className="w-3.5 h-3.5 text-[#E0447C]" /> Foto de Evidência
+                    <Camera className="w-3.5 h-3.5 text-[#E0447C]" /> Evidência
                   </p>
                   <p className="text-[11px] text-[#8A6F6F]">
-                    O colaborador anexa a foto ao concluir (câmera ou galeria)
+                    Foto ou vídeo anexado pelo colaborador ao concluir (câmera ou galeria)
                   </p>
                 </div>
                 <div className="grid grid-cols-3 gap-2">
                   {(
                     [
-                      { v: 'obrigatoria', label: 'Obrigatória', icon: Camera },
-                      { v: 'opcional', label: 'Opcional', icon: Upload },
-                      { v: 'nenhuma', label: 'Sem foto', icon: X },
+                      { v: 'nenhuma', label: 'Sem foto e vídeo', icon: X },
+                      { v: 'foto_obrigatoria', label: 'Foto obrigatória', icon: Camera },
+                      { v: 'foto_opcional', label: 'Foto opcional', icon: Upload },
                     ] as const
                   ).map(({ v, label, icon: Icon }) => (
                     <button
                       key={v}
                       type="button"
-                      onClick={() => setFotoEvidencia(v)}
+                      onClick={() => setEvidencia(v)}
                       className={`flex flex-col items-center gap-1 py-2.5 rounded-xl border text-[11px] font-bold transition cursor-pointer ${
-                        fotoEvidencia === v
+                        evidencia === v
                           ? 'bg-[#E0447C] border-[#E0447C] text-white shadow-sm'
                           : 'bg-white border-[#F2A65A]/30 text-[#8A6F6F] hover:border-[#E0447C]/50'
                       }`}
@@ -635,14 +659,38 @@ export default function ProcessoDetalhe() {
                     </button>
                   ))}
                 </div>
-                {fotoEvidencia === 'obrigatoria' && (
+                <div className="grid grid-cols-2 gap-2">
+                  {(
+                    [
+                      { v: 'video_obrigatorio', label: 'Vídeo obrigatório', icon: Video },
+                      { v: 'video_opcional', label: 'Vídeo opcional', icon: Video },
+                    ] as const
+                  ).map(({ v, label, icon: Icon }) => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => setEvidencia(v)}
+                      className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl border text-[11px] font-bold transition cursor-pointer ${
+                        evidencia === v
+                          ? 'bg-[#3B7A9C] border-[#3B7A9C] text-white shadow-sm'
+                          : 'bg-white border-[#3B7A9C]/30 text-[#8A6F6F] hover:border-[#3B7A9C]/50'
+                      }`}
+                    >
+                      <Icon className="w-4 h-4" />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {(evidencia === 'foto_obrigatoria' || evidencia === 'video_obrigatorio') && (
                   <p className="text-[11px] text-[#8A6F6F]">
-                    O item só poderá ser concluído com a foto anexada.
+                    O item só poderá ser concluído com a evidência anexada
+                    {evidencia === 'video_obrigatorio' ? ' (vídeo de até 30 segundos)' : ''}.
                   </p>
                 )}
-                {fotoEvidencia === 'opcional' && (
+                {(evidencia === 'foto_opcional' || evidencia === 'video_opcional') && (
                   <p className="text-[11px] text-[#8A6F6F]">
-                    A foto é incentivada, mas o item pode ser concluído sem ela.
+                    A evidência é incentivada, mas o item pode ser concluído sem ela
+                    {evidencia === 'video_opcional' ? ' (vídeo de até 30 segundos)' : ''}.
                   </p>
                 )}
               </div>

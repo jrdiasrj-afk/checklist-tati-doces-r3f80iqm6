@@ -25,6 +25,7 @@ import {
   Type,
   X,
   Upload,
+  Video,
 } from 'lucide-react'
 
 const TIPO_LIMITE_MENCIONA = (limite?: string) => (limite ? `Limite: ${limite.slice(0, 5)}` : '')
@@ -128,6 +129,7 @@ export default function Hoje() {
     status: 'concluida' | 'nao_aplicavel'
     observacao?: string
     fotoFile?: File | null
+    videoFile?: File | null
     medicao_valor?: number
     fora_padrao?: boolean
   }) => {
@@ -312,7 +314,7 @@ export default function Hoje() {
                 key={a.id}
                 a={a}
                 apenasLeitura
-                onReenviarFoto={
+                onReenviarEvidencia={
                   a.foto_veredito === 'reprovado' || a.foto_veredito === 'erro'
                     ? (acao, file) => reenviarFoto(a, acao, file)
                     : undefined
@@ -344,7 +346,7 @@ function AtribuicaoItem({
   apenasLeitura = false,
   onConcluir,
   onNA,
-  onReenviarFoto,
+  onReenviarEvidencia,
   reenviando = false,
 }: {
   a: AtribuicaoRecord
@@ -352,7 +354,7 @@ function AtribuicaoItem({
   apenasLeitura?: boolean
   onConcluir?: () => void
   onNA?: () => void
-  onReenviarFoto?: (acao: AcaoReprovada, fotoFile: File | null) => void
+  onReenviarEvidencia?: (acao: AcaoReprovada, arquivo: File | null) => void
   reenviando?: boolean
 }) {
   const tarefa = a.expand?.tarefa
@@ -360,12 +362,18 @@ function AtribuicaoItem({
   const critica = !!tarefa?.critica
   const pedeFoto = tarefaPedeFoto(tarefa)
   const fotoObrigatoria = tarefaExigeFoto(tarefa)
+  const pedeVideo = tarefaPedeVideo(tarefa)
+  const videoObrigatorio = tarefaExigeVideo(tarefa)
   const fotoUrl = a.foto ? usersService.getFileUrl(a, a.foto) : null
-  const [lightboxFotoUrl, setLightboxFotoUrl] = useState<string | null>(null)
-  const [novaFotoFile, setNovaFotoFile] = useState<File | null>(null)
+  const videoUrl = a.video ? usersService.getFileUrl(a, a.video) : null
+  const [lightboxAberto, setLightboxAberto] = useState<{
+    tipo: 'foto' | 'video'
+    url: string
+  } | null>(null)
+  const [novaEvidenciaFile, setNovaEvidenciaFile] = useState<File | null>(null)
   const veredito = a.foto_veredito || ''
   const podeReenviar =
-    !!onReenviarFoto && (veredito === 'reprovado' || veredito === 'erro') && !reenviando
+    !!onReenviarEvidencia && (veredito === 'reprovado' || veredito === 'erro') && !reenviando
 
   return (
     <div
@@ -394,6 +402,18 @@ function AtribuicaoItem({
               </span>
             )}
             <VereditoBadge veredito={veredito} />
+            {pedeVideo && !atrasada && (
+              <span
+                className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                  videoObrigatorio
+                    ? 'text-[#3B7A9C] bg-[#EAF4FA] border-[#3B7A9C]/20'
+                    : 'text-[#2D7A51] bg-[#EDF8F1] border-[#2D7A51]/20'
+                }`}
+              >
+                <Video className="w-2.5 h-2.5" />{' '}
+                {videoObrigatorio ? 'Vídeo obrigatório' : 'Vídeo opcional'}
+              </span>
+            )}
             {pedeFoto && !atrasada && (
               <span
                 className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border ${
@@ -441,10 +461,20 @@ function AtribuicaoItem({
           {fotoUrl && (
             <button
               type="button"
-              onClick={() => setLightboxFotoUrl(fotoUrl)}
+              onClick={() => setLightboxAberto({ tipo: 'foto', url: fotoUrl })}
               className="mt-2 w-16 h-16 rounded-xl overflow-hidden border border-[#E0447C]/40 shrink-0 hover:scale-105 transition cursor-pointer"
             >
               <img src={fotoUrl} alt="Evidência" className="w-full h-full object-cover" />
+            </button>
+          )}
+          {videoUrl && (
+            <button
+              type="button"
+              onClick={() => setLightboxAberto({ tipo: 'video', url: videoUrl })}
+              title="Assistir vídeo da tarefa"
+              className="mt-2 w-16 h-16 rounded-xl overflow-hidden border border-[#3B7A9C]/40 shrink-0 hover:scale-105 transition cursor-pointer flex items-center justify-center bg-[#3B2B2B]"
+            >
+              <Video className="w-6 h-6 text-white" />
             </button>
           )}
           {!fotoUrl && pedeFoto && a.status === 'concluida' && (
@@ -463,22 +493,32 @@ function AtribuicaoItem({
             <div className="mt-3 p-3 rounded-xl border border-[#E0447C]/25 bg-[#FFF5F5] space-y-2">
               <p className="text-xs font-bold text-[#E5484D]">
                 {veredito === 'erro'
-                  ? 'A conferência automática falhou — reenvie a foto ou volte o item a pendente.'
-                  : 'A foto não passou na conferência. Envie uma nova foto ou volte o item a pendente.'}
+                  ? 'A conferência automática falhou — reenvie a evidência ou volte o item a pendente.'
+                  : `A ${pedeVideo ? 'vídeo' : 'foto'} não passou na conferência. Envie ${
+                      pedeVideo ? 'um novo vídeo' : 'uma nova foto'
+                    } ou volte o item a pendente.`}
               </p>
               {veredito === 'reprovado' && (
                 <label className="flex items-center justify-center gap-2 h-16 rounded-xl border-2 border-dashed border-[#E0447C]/40 bg-white/60 cursor-pointer hover:border-[#E0447C]/60 transition">
-                  <Camera className="w-4 h-4 text-[#E0447C]" />
+                  {pedeVideo ? (
+                    <Video className="w-4 h-4 text-[#E0447C]" />
+                  ) : (
+                    <Camera className="w-4 h-4 text-[#E0447C]" />
+                  )}
                   <span className="text-xs font-semibold text-[#8A6F6F]">
-                    {novaFotoFile ? novaFotoFile.name : 'Nova foto (câmera ou galeria)'}
+                    {novaEvidenciaFile
+                      ? novaEvidenciaFile.name
+                      : pedeVideo
+                        ? 'Novo vídeo (câmera ou galeria)'
+                        : 'Nova foto (câmera ou galeria)'}
                   </span>
                   <input
                     type="file"
-                    accept="image/*"
+                    accept={pedeVideo ? 'video/*' : 'image/*'}
                     capture="environment"
                     className="hidden"
                     disabled={reenviando}
-                    onChange={(e) => setNovaFotoFile(e.target.files?.[0] || null)}
+                    onChange={(e) => setNovaEvidenciaFile(e.target.files?.[0] || null)}
                   />
                 </label>
               )}
@@ -488,19 +528,19 @@ function AtribuicaoItem({
                     size="sm"
                     disabled={reenviando}
                     onClick={() => {
-                      if (!novaFotoFile) return
-                      onReenviarFoto!('reenviar', novaFotoFile)
+                      if (!novaEvidenciaFile) return
+                      onReenviarEvidencia!('reenviar', novaEvidenciaFile)
                     }}
                     className="h-8 rounded-full bg-[#E0447C] hover:bg-[#C23066] text-white text-[11px] font-bold px-3"
                   >
-                    {reenviando ? 'Enviando…' : 'Reenviar foto'}
+                    {reenviando ? 'Enviando…' : pedeVideo ? 'Reenviar vídeo' : 'Reenviar foto'}
                   </Button>
                 )}
                 <Button
                   size="sm"
                   variant="outline"
                   disabled={reenviando}
-                  onClick={() => onReenviarFoto!('voltar_pendente', null)}
+                  onClick={() => onReenviarEvidencia!('voltar_pendente', null)}
                   className="h-8 rounded-full border-[#E5484D]/40 text-[#E5484D] text-[11px] font-semibold px-3"
                 >
                   Voltar a pendente
@@ -531,23 +571,33 @@ function AtribuicaoItem({
         )}
       </div>
 
-      {lightboxFotoUrl && (
+      {lightboxAberto && (
         <div
-          onClick={() => setLightboxFotoUrl(null)}
+          onClick={() => setLightboxAberto(null)}
           className="fixed inset-0 z-60 bg-black/80 flex items-center justify-center p-4 backdrop-blur-xs cursor-pointer"
         >
           <div className="relative max-w-lg max-h-[85vh] p-2 bg-white rounded-3xl overflow-hidden shadow-2xl">
             <button
-              onClick={() => setLightboxFotoUrl(null)}
+              onClick={() => setLightboxAberto(null)}
               className="absolute top-4 right-4 p-2 rounded-full bg-black/60 text-white hover:bg-black transition cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
-            <img
-              src={lightboxFotoUrl}
-              alt="Evidência ampliada"
-              className="w-full h-auto max-h-[80vh] object-contain rounded-2xl"
-            />
+            {lightboxAberto.tipo === 'video' ? (
+              <video
+                src={lightboxAberto.url}
+                controls
+                autoPlay
+                playsInline
+                className="w-full h-auto max-h-[80vh] rounded-2xl bg-black"
+              />
+            ) : (
+              <img
+                src={lightboxAberto.url}
+                alt="Evidência ampliada"
+                className="w-full h-auto max-h-[80vh] object-contain rounded-2xl"
+              />
+            )}
           </div>
         </div>
       )}
@@ -568,6 +618,7 @@ function ConcluirModal({
     status: 'concluida' | 'nao_aplicavel'
     observacao?: string
     fotoFile?: File | null
+    videoFile?: File | null
     medicao_valor?: number
     fora_padrao?: boolean
   }) => void
@@ -576,12 +627,17 @@ function ConcluirModal({
   const tipo = tarefa?.tipo_registro || 'nenhum'
   const fotoObrigatoria = tarefaExigeFoto(tarefa)
   const pedeFoto = fotoObrigatoria || tarefaPedeFoto(tarefa)
+  const videoObrigatorio = tarefaExigeVideo(tarefa)
+  const pedeVideo = tarefaPedeVideo(tarefa)
   const exigeTexto = tipo === 'texto'
   const exigeMedicao = tipo === 'medicao'
 
   const [observacao, setObservacao] = useState('')
   const [fotoFile, setFotoFile] = useState<File | null>(null)
   const [fotoPreview, setFotoPreview] = useState<string | null>(null)
+  const [videoFile, setVideoFile] = useState<File | null>(null)
+  const [videoPreview, setVideoPreview] = useState<string | null>(null)
+  const [videoDuracao, setVideoDuracao] = useState<number | null>(null)
   const [medicaoStr, setMedicaoStr] = useState('')
   const [modoNA, setModoNA] = useState(false)
   const [erro, setErro] = useState('')
@@ -592,6 +648,31 @@ function ConcluirModal({
     const f = e.target.files?.[0] || null
     setFotoFile(f)
     setFotoPreview(f ? URL.createObjectURL(f) : null)
+  }
+
+  const handleVideo = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0] || null
+    if (!f) {
+      setVideoFile(null)
+      setVideoPreview(null)
+      setVideoDuracao(null)
+      return
+    }
+    const duracao = await lerDuracaoVideo(f)
+    if (duracao !== null && duracao > VIDEO_DURACAO_MAX + 0.5) {
+      setErro(
+        `O vídeo deve ter no máximo ${VIDEO_DURACAO_MAX} segundos (este tem ${Math.round(duracao)}s).`,
+      )
+      setVideoFile(null)
+      setVideoPreview(null)
+      setVideoDuracao(null)
+      e.target.value = ''
+      return
+    }
+    setErro('')
+    setVideoFile(f)
+    setVideoPreview(URL.createObjectURL(f))
+    setVideoDuracao(duracao)
   }
 
   const submit = () => {
@@ -608,6 +689,10 @@ function ConcluirModal({
 
     if (fotoObrigatoria && !fotoFile) {
       setErro('Este item exige uma foto para ser concluído.')
+      return
+    }
+    if (videoObrigatorio && !videoFile) {
+      setErro(`Este item exige um vídeo de até ${VIDEO_DURACAO_MAX} segundos para ser concluído.`)
       return
     }
     if (exigeMedicao) {
@@ -639,6 +724,10 @@ function ConcluirModal({
     }
     if (exigeTexto && !observacao.trim()) {
       setErro('Este item exige uma observação em texto para ser concluído.')
+      return
+    }
+    if (pedeVideo) {
+      onConfirm({ status: 'concluida', observacao: observacao.trim() || undefined, videoFile })
       return
     }
     onConfirm({ status: 'concluida', observacao: observacao.trim() || undefined, fotoFile })
@@ -684,6 +773,57 @@ function ConcluirModal({
                 onChange={(e) => setMedicaoStr(e.target.value)}
                 className="h-11 rounded-xl bg-[#FFF9F2]/60 border-[#F2A65A]/30 focus-visible:ring-[#E0447C]"
               />
+            </div>
+          )}
+
+          {pedeVideo && !modoNA && (
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold uppercase tracking-wider text-[#3B2B2B]">
+                Vídeo de Evidência {videoObrigatorio ? '*' : ' (opcional)'}
+              </Label>
+              <p className="text-[11px] text-[#8A6F6F]">
+                {videoObrigatorio
+                  ? `O item só pode ser concluído com o vídeo anexado (máx. ${VIDEO_DURACAO_MAX} segundos).`
+                  : `Vídeo incentivado — o item pode ser concluído sem ele (máx. ${VIDEO_DURACAO_MAX} segundos).`}
+              </p>
+              {videoPreview ? (
+                <div className="relative rounded-2xl overflow-hidden border border-[#3B7A9C]/30">
+                  <video src={videoPreview} controls playsInline className="w-full h-40 bg-black" />
+                  <span className="absolute bottom-2 left-2 text-[10px] font-bold px-2 py-0.5 rounded-full bg-black/60 text-white">
+                    {videoDuracao !== null
+                      ? `${Math.round(videoDuracao)}s de ${VIDEO_DURACAO_MAX}s`
+                      : `máx. ${VIDEO_DURACAO_MAX}s`}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setVideoFile(null)
+                      setVideoPreview(null)
+                      setVideoDuracao(null)
+                    }}
+                    className="absolute top-2 right-2 p-1.5 rounded-full bg-black/50 text-white cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <label className="flex flex-col items-center justify-center gap-2 h-28 rounded-2xl border-2 border-dashed border-[#3B7A9C]/40 bg-[#FFF9F2]/50 cursor-pointer hover:border-[#3B7A9C]/60 transition">
+                  <div className="flex items-center gap-2">
+                    <Video className="w-5 h-5 text-[#3B7A9C]" />
+                    <Upload className="w-5 h-5 text-[#3B7A9C]" />
+                  </div>
+                  <span className="text-xs font-semibold text-[#8A6F6F]">
+                    Gravar vídeo ou escolher da galeria · máx. {VIDEO_DURACAO_MAX}s
+                  </span>
+                  <input
+                    type="file"
+                    accept="video/*"
+                    capture="environment"
+                    className="hidden"
+                    onChange={handleVideo}
+                  />
+                </label>
+              )}
             </div>
           )}
 
