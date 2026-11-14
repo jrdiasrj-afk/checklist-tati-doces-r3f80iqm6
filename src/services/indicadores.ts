@@ -107,7 +107,7 @@ export const indicadoresService = {
   /** Ranking de colaboradores no período */
   montarRanking(
     atribuicoes: AtribuicaoInput[],
-    users: { id: string; name: string; email: string }[],
+    users: { id: string; name?: string; email: string }[],
   ): RankingRow[] {
     const byUser = new Map<string, AtribuicaoInput[]>()
     for (const a of atribuicoes) {
@@ -189,6 +189,14 @@ export function minutosAtraso(
 /** Alias de calcularIndicadores (usado nas páginas) */
 export function calcularIndicadores(atribuicoes: AtribuicaoInput[]): Indicadores {
   return indicadoresService.calcularIndicadores(atribuicoes)
+}
+
+/** Ranking de colaboradores por pontos (score Koncluí 0–100) — usado na Dashboard */
+export function montarRanking(
+  atribuicoes: AtribuicaoInput[],
+  users: { id: string; name?: string; email: string }[],
+): RankingRow[] {
+  return indicadoresService.montarRanking(atribuicoes, users)
 }
 
 /** Indicadores de um dia específico (dashboard) */

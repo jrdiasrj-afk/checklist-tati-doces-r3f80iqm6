@@ -3,18 +3,17 @@ import { useNavigate } from 'react-router-dom'
 import { MainLayout } from '@/components/MainLayout'
 import { atribuicoesService } from '@/services/atribuicoes'
 import { usersService } from '@/services/users'
-import { processosService } from '@/services/processos'
 import { alertasService } from '@/services/alertas'
 import { useRealtime } from '@/hooks/use-realtime'
 import {
   estaAtrasada,
   minutosAtraso,
-  indicadoresDia,
+  calcularIndicadores,
   montarRanking,
   type Indicadores,
 } from '@/services/indicadores'
-import type { AtribuicaoRecord, UserRecord, ProcessoRecord, AlertaRecord } from '@/types'
-import { LOCAIS, LOCAL_LABELS, localLabel, isLocalValue, type LocalValue } from '@/lib/locais'
+import type { AtribuicaoRecord, UserRecord, AlertaRecord } from '@/types'
+import { LOCAIS, LOCAL_LABELS, localLabel, isLocalValue } from '@/lib/locais'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -35,7 +34,6 @@ import {
   Camera,
   Calendar,
   X,
-  FileSpreadsheet,
   Zap,
   Thermometer,
   Timer,
@@ -99,10 +97,7 @@ export default function Dashboard() {
 
   // Dados
   const [atribuicoes, setAtribuicoes] = useState<AtribuicaoRecord[]>([])
-  const [atrasadasTotal, setAtrasadasTotal] = useState(0)
-  const [atrasadasPorLocal, setAtrasadasPorLocal] = useState<Map<string, number>>(new Map())
   const [colaboradores, setColaboradores] = useState<UserRecord[]>([])
-  const [processos, setProcessos] = useState<ProcessoRecord[]>([])
   const [alertas, setAlertas] = useState<AlertaRecord[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -119,13 +114,11 @@ export default function Dashboard() {
   useEffect(() => {
     const loadFilters = async () => {
       try {
-        const [usersList, procList, alertasList] = await Promise.all([
+        const [usersList, alertasList] = await Promise.all([
           usersService.list(),
-          processosService.list(),
           alertasService.list(),
         ])
         setColaboradores(usersList)
-        setProcessos(procList)
         setAlertas(alertasList)
       } catch (err) {
         console.error('Erro ao carregar filtros:', err)
@@ -154,18 +147,8 @@ export default function Dashboard() {
           status: 'pendente',
         })
         setAtrasadasHistorico(pastPending)
-        setAtrasadasTotal(pastPending.length)
-        // Contagem de atrasadas por local (para o filtro de local)
-        const porLocal = new Map<string, number>()
-        pastPending.forEach((a) => {
-          const loc = a.expand?.tarefa?.expand?.processo?.local || 'sem_local'
-          porLocal.set(loc, (porLocal.get(loc) || 0) + 1)
-        })
-        setAtrasadasPorLocal(porLocal)
       } else {
         setAtrasadasHistorico([])
-        setAtrasadasTotal(0)
-        setAtrasadasPorLocal(new Map())
       }
     } catch (err) {
       console.error('Erro ao carregar dados do dia:', err)

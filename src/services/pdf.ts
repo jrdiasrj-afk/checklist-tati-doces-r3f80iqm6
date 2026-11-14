@@ -1,5 +1,6 @@
 import { toast } from 'sonner'
-import { jsPDF, type CellDef, type RowInput, type UserOptions } from 'jspdf'
+import { jsPDF } from 'jspdf'
+import type { CellDef, RowInput, HookData } from 'jspdf-autotable'
 import autoTable from 'jspdf-autotable'
 import type { AtribuicaoRecord } from '@/types'
 import { calcularIndicadores, type Indicadores } from './indicadores'
@@ -131,7 +132,7 @@ export function exportarRelatorioPDF(
     columnStyles: {
       12: { cellWidth: 140 },
     },
-    didDrawPage: (data: UserOptions) => {
+    didDrawPage: (data: HookData) => {
       const pageNum = doc.getNumberOfPages()
       doc.setFontSize(8)
       doc.setTextColor(138, 111, 111)
