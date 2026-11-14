@@ -2,13 +2,20 @@ import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { MainLayout } from '@/components/MainLayout'
 import { processosService } from '@/services/processos'
-import type { ProcessoRecord, TarefaRecord, AreaProcesso } from '@/types'
+import type { ProcessoRecord, TarefaRecord, AreaProcesso, TipoRegistro, UserRecord } from '@/types'
 import { AreaBadge } from '@/components/AreaBadge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
+import {
+  RecorrenciaForm,
+  recorrenciaDoProcesso,
+  resumoRecorrencia,
+  type RecorrenciaState,
+} from '@/components/RecorrenciaForm'
+import { usersService } from '@/services/users'
 import { toast } from 'sonner'
 import {
   ArrowLeft,
@@ -18,6 +25,11 @@ import {
   Edit2,
   Trash2,
   Camera,
+  Ruler,
+  Type,
+  Thermometer,
+  Repeat,
+  Zap,
   CheckCircle,
   X,
   AlertTriangle,
@@ -38,7 +50,17 @@ export default function ProcessoDetalhe() {
   const [descricao, setDescricao] = useState('')
   const [evidenciaObrigatoria, setEvidenciaObrigatoria] = useState(false)
   const [ativa, setAtiva] = useState(true)
+  const [critica, setCritica] = useState(false)
+  const [tipoRegistro, setTipoRegistro] = useState<TipoRegistro>('nenhum')
+  const [medicaoAlvo, setMedicaoAlvo] = useState('')
+  const [medicaoMax, setMedicaoMax] = useState('')
+  const [medicaoUnidade, setMedicaoUnidade] = useState('')
   const [savingTask, setSavingTask] = useState(false)
+
+  // Recorrência do processo
+  const [recorrencia, setRecorrencia] = useState<RecorrenciaState>(recorrenciaDoProcesso({}))
+  const [colaboradores, setColaboradores] = useState<UserRecord[]>([])
+  const [savingRecorrencia, setSavingRecorrencia] = useState(false)
 
   // Modal de Exclusão do Processo
   const [confirmDeleteProcesso, setConfirmDeleteProcesso] = useState(false)
@@ -55,6 +77,7 @@ export default function ProcessoDetalhe() {
       ])
       setProcesso(procData)
       setTarefas(tarefasData)
+      setRecorrencia(recorrenciaDoProcesso(procData))
     } catch (err) {
       toast.error('Erro ao carregar detalhes do processo.')
       navigate('/processos')
@@ -65,6 +88,10 @@ export default function ProcessoDetalhe() {
 
   useEffect(() => {
     loadProcessoAndTarefas()
+    usersService
+      .list()
+      .then(setColaboradores)
+      .catch(() => {})
   }, [id])
 
   const handleOpenCreateTask = () => {
@@ -73,6 +100,11 @@ export default function ProcessoDetalhe() {
     setDescricao('')
     setEvidenciaObrigatoria(false)
     setAtiva(true)
+    setCritica(false)
+    setTipoRegistro('nenhum')
+    setMedicaoAlvo('')
+    setMedicaoMax('')
+    setMedicaoUnidade('')
     setIsTaskModalOpen(true)
   }
 
@@ -82,6 +114,17 @@ export default function ProcessoDetalhe() {
     setDescricao(task.descricao || '')
     setEvidenciaObrigatoria(task.evidencia_obrigatoria)
     setAtiva(task.ativa)
+    setCritica(!!task.critica)
+    setTipoRegistro(task.tipo_registro || 'nenhum')
+    setMedicaoAlvo(
+      task.medicao_alvo !== undefined && task.medicao_alvo !== null
+        ? String(task.medicao_alvo)
+        : '',
+    )
+    setMedicaoMax(
+      task.medicao_max !== undefined && task.medicao_max !== null ? String(task.medicao_max) : '',
+    )
+    setMedicaoUnidade(task.medicao_unidade || '')
     setIsTaskModalOpen(true)
   }
 
@@ -91,23 +134,28 @@ export default function ProcessoDetalhe() {
 
     setSavingTask(true)
     try {
+      const dadosTarefa = {
+        titulo: titulo.trim(),
+        descricao: descricao.trim(),
+        evidencia_obrigatoria: evidenciaObrigatoria || tipoRegistro === 'foto',
+        ativa,
+        critica,
+        tipo_registro: (tipoRegistro === 'foto' ? 'foto' : tipoRegistro) as TipoRegistro,
+        medicao_alvo:
+          tipoRegistro === 'medicao' && medicaoAlvo !== '' ? Number(medicaoAlvo) : undefined,
+        medicao_max:
+          tipoRegistro === 'medicao' && medicaoMax !== '' ? Number(medicaoMax) : undefined,
+        medicao_unidade: tipoRegistro === 'medicao' ? medicaoUnidade.trim() : undefined,
+      }
       if (editingTask) {
-        await processosService.updateTarefa(editingTask.id, {
-          titulo: titulo.trim(),
-          descricao: descricao.trim(),
-          evidencia_obrigatoria: evidenciaObrigatoria,
-          ativa,
-        })
+        await processosService.updateTarefa(editingTask.id, dadosTarefa)
         toast.success('Tarefa atualizada!')
       } else {
         const nextOrder = tarefas.length > 0 ? Math.max(...tarefas.map((t) => t.ordem)) + 1 : 1
         await processosService.createTarefa({
           processo: id,
-          titulo: titulo.trim(),
-          descricao: descricao.trim(),
           ordem: nextOrder,
-          evidencia_obrigatoria: evidenciaObrigatoria,
-          ativa,
+          ...dadosTarefa,
         })
         toast.success('Nova tarefa adicionada ao checklist!')
       }
@@ -227,6 +275,55 @@ export default function ProcessoDetalhe() {
           </div>
         </div>
 
+        {/* Recorrência do processo (estilo Koncluí) */}
+        <div className="mt-6 p-4 rounded-2xl bg-[#FFF9F2] border border-[#F2A65A]/20 space-y-4">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-bold text-[#3B2B2B] flex items-center gap-1.5">
+              <Repeat className="w-3.5 h-3.5 text-[#E0447C]" /> Rotina Recorrente
+            </p>
+            <span className="text-[11px] font-semibold text-[#8A6F6F]">
+              {resumoRecorrencia(recorrencia)}
+            </span>
+          </div>
+          <RecorrenciaForm
+            value={recorrencia}
+            onChange={setRecorrencia}
+            colaboradores={colaboradores}
+          />
+          <div className="flex items-center justify-end gap-2 pt-1">
+            <Button
+              type="button"
+              size="sm"
+              disabled={savingRecorrencia}
+              onClick={async () => {
+                if (!id) return
+                setSavingRecorrencia(true)
+                try {
+                  await processosService.update(id, {
+                    recorrencia: recorrencia.recorrencia,
+                    dias_semana:
+                      recorrencia.recorrencia === 'dias_semana' ? recorrencia.dias_semana : [],
+                    horario_limite: recorrencia.horario_limite || '',
+                    vigencia: recorrencia.vigencia || '',
+                    designados: recorrencia.designados,
+                  })
+                  toast.success(
+                    'Rotina recorrente salva! As tarefas serão geradas automaticamente.',
+                  )
+                  loadProcessoAndTarefas()
+                } catch (err) {
+                  toast.error('Erro ao salvar a recorrência.')
+                } finally {
+                  setSavingRecorrencia(false)
+                }
+              }}
+              className="rounded-full bg-[#E0447C] hover:bg-[#C23066] text-white text-xs font-bold px-5"
+            >
+              {savingRecorrencia ? 'Salvando...' : 'Salvar Recorrência'}
+            </Button>
+          </div>
+        </div>
+
         {/* Lista de Tarefas do Checklist */}
         <div className="mt-6">
           <div className="flex items-center justify-between mb-4">
@@ -265,9 +362,28 @@ export default function ProcessoDetalhe() {
                     <div className="min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <h4 className="text-sm font-bold text-[#3B2B2B]">{task.titulo}</h4>
+                        {task.critica && (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#E5484D] bg-[#E5484D]/10 px-2 py-0.5 rounded-full border border-[#E5484D]/25">
+                            <Zap className="w-3 h-3" /> Crítica
+                          </span>
+                        )}
                         {task.evidencia_obrigatoria && (
                           <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#E0447C] bg-[#FFF3E8] px-2 py-0.5 rounded-full border border-[#E0447C]/20">
                             <Camera className="w-3 h-3" /> Foto Obrigatória
+                          </span>
+                        )}
+                        {task.tipo_registro === 'medicao' && (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#3B7A9C] bg-[#EAF4FA] px-2 py-0.5 rounded-full border border-[#3B7A9C]/20">
+                            <Thermometer className="w-3 h-3" />
+                            Medição
+                            {task.medicao_alvo !== undefined && task.medicao_alvo !== null
+                              ? `: até ${task.medicao_alvo}${task.medicao_unidade || ''}`
+                              : ''}
+                          </span>
+                        )}
+                        {task.tipo_registro === 'texto' && (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#7A5C9C] bg-[#F3ECFA] px-2 py-0.5 rounded-full border border-[#7A5C9C]/20">
+                            <Type className="w-3 h-3" /> Texto obrigatório
                           </span>
                         )}
                         {!task.ativa && (
@@ -379,16 +495,95 @@ export default function ProcessoDetalhe() {
                 />
               </div>
 
-              <div className="flex items-center justify-between p-3 rounded-xl bg-[#FFF9F2] border border-[#F2A65A]/20">
+              {/* Item crítico */}
+              <div className="flex items-center justify-between p-3 rounded-xl bg-[#FFF3F3] border border-[#E5484D]/20">
                 <div>
                   <p className="text-xs font-bold text-[#3B2B2B] flex items-center gap-1.5">
-                    <Camera className="w-3.5 h-3.5 text-[#E0447C]" /> Exigir Foto de Evidência
+                    <Zap className="w-3.5 h-3.5 text-[#E5484D]" /> Item Crítico
                   </p>
                   <p className="text-[11px] text-[#8A6F6F]">
-                    O colaborador só pode concluir se tirar uma foto
+                    O que não pode falhar — destaque no celular e alerta na dashboard
                   </p>
                 </div>
-                <Switch checked={evidenciaObrigatoria} onCheckedChange={setEvidenciaObrigatoria} />
+                <Switch checked={critica} onCheckedChange={setCritica} />
+              </div>
+
+              {/* Tipo de registro exigido */}
+              <div className="p-3 rounded-xl bg-[#FFF9F2] border border-[#F2A65A]/20 space-y-3">
+                <div>
+                  <p className="text-xs font-bold text-[#3B2B2B] flex items-center gap-1.5">
+                    <Ruler className="w-3.5 h-3.5 text-[#E0447C]" /> Registro Exigido
+                  </p>
+                  <p className="text-[11px] text-[#8A6F6F]">
+                    Sem o registro exigido, o item não conta como concluído
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {(
+                    [
+                      { v: 'nenhum', label: 'Nenhum', icon: CheckCircle },
+                      { v: 'foto', label: 'Foto', icon: Camera },
+                      { v: 'medicao', label: 'Medição', icon: Thermometer },
+                      { v: 'texto', label: 'Texto', icon: Type },
+                    ] as const
+                  ).map(({ v, label, icon: Icon }) => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => setTipoRegistro(v)}
+                      className={`flex flex-col items-center gap-1 py-2.5 rounded-xl border text-[11px] font-bold transition cursor-pointer ${
+                        tipoRegistro === v
+                          ? 'bg-[#E0447C] border-[#E0447C] text-white shadow-sm'
+                          : 'bg-white border-[#F2A65A]/30 text-[#8A6F6F] hover:border-[#E0447C]/50'
+                      }`}
+                    >
+                      <Icon className="w-4 h-4" />
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                {tipoRegistro === 'medicao' && (
+                  <div className="grid grid-cols-3 gap-2 pt-1">
+                    <div className="space-y-1">
+                      <Label className="text-[11px] font-bold text-[#3B2B2B]">Valor-alvo</Label>
+                      <Input
+                        type="number"
+                        step="any"
+                        placeholder="5"
+                        value={medicaoAlvo}
+                        onChange={(e) => setMedicaoAlvo(e.target.value)}
+                        className="h-10 rounded-xl bg-white border-[#F2A65A]/30 text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[11px] font-bold text-[#3B2B2B]">Máximo</Label>
+                      <Input
+                        type="number"
+                        step="any"
+                        placeholder="5"
+                        value={medicaoMax}
+                        onChange={(e) => setMedicaoMax(e.target.value)}
+                        className="h-10 rounded-xl bg-white border-[#F2A65A]/30 text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[11px] font-bold text-[#3B2B2B]">Unidade</Label>
+                      <Input
+                        placeholder="°C"
+                        value={medicaoUnidade}
+                        onChange={(e) => setMedicaoUnidade(e.target.value)}
+                        className="h-10 rounded-xl bg-white border-[#F2A65A]/30 text-sm"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {tipoRegistro === 'texto' && (
+                  <p className="text-[11px] text-[#8A6F6F]">
+                    O colaborador deverá escrever uma observação obrigatória ao concluir.
+                  </p>
+                )}
               </div>
 
               <div className="flex items-center justify-between p-3 rounded-xl bg-[#FFF9F2] border border-[#F2A65A]/20">

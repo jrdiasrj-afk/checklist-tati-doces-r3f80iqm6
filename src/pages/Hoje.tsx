@@ -1,542 +1,567 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { MainLayout } from '@/components/MainLayout'
-import { useAuth } from '@/contexts/AuthContext'
-import { atribuicoesService } from '@/services/atribuicoes'
-import { useRealtime } from '@/hooks/use-realtime'
-import type { AtribuicaoRecord } from '@/types'
 import { AreaBadge } from '@/components/AreaBadge'
+import { useAuth } from '@/contexts/AuthContext'
+import { useRealtime } from '@/hooks/use-realtime'
+import { atribuicoesService } from '@/services/atribuicoes'
+import { usersService } from '@/services/users'
+import type { AtribuicaoRecord } from '@/types'
+import { estaAtrasada, parseLimite } from '@/services/indicadores'
 import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { toast } from 'sonner'
+import { Textarea } from '@/components/ui/textarea'
+import { Switch } from '@/components/ui/switch'
+import { toast, Toaster } from 'sonner'
+import confetti from 'canvas-confetti'
 import {
-  Check,
   CheckCircle2,
-  Clock,
   Camera,
-  MoreVertical,
+  ClipboardList,
+  AlertCircle,
+  Zap,
+  Thermometer,
+  Type,
   X,
-  UploadCloud,
-  MinusCircle,
-  HelpCircle,
-  Sparkles,
+  Upload,
 } from 'lucide-react'
+
+const TIPO_LIMITE_MENCIONA = (limite?: string) => (limite ? `Limite: ${limite.slice(0, 5)}` : '')
 
 export default function Hoje() {
   const { user } = useAuth()
   const [atribuicoes, setAtribuicoes] = useState<AtribuicaoRecord[]>([])
   const [loading, setLoading] = useState(true)
+  const [data, setData] = useState(() => new Date().toISOString().split('T')[0])
+  const [modalAberto, setModalAberto] = useState<AtribuicaoRecord | null>(null)
 
-  // Data atual
-  const todayStr = useMemo(() => {
-    return new Date().toISOString().split('T')[0]
-  }, [])
-
-  // Sheet / Modal de Conclusão da Tarefa
-  const [activeTaskToComplete, setActiveTaskToComplete] = useState<AtribuicaoRecord | null>(null)
-  const [observacao, setObservacao] = useState('')
-  const [fotoFile, setFotoFile] = useState<File | null>(null)
-  const [fotoPreview, setFotoPreview] = useState<string | null>(null)
-  const [submitting, setSubmitting] = useState(false)
-
-  // Modal para marcar "Não se aplica"
-  const [taskNotApplicable, setTaskNotApplicable] = useState<AtribuicaoRecord | null>(null)
-  const [motivoNotApplicable, setMotivoNotApplicable] = useState('')
-
-  // Efeito de confetes no item recém concluído
-  const [celebratedTaskId, setCelebratedTaskId] = useState<string | null>(null)
-
-  // File input ref
-  const fileInputRef = useRef<HTMLInputElement>(null)
-
-  const loadMinhasTarefas = async () => {
+  const loadData = useCallback(async () => {
     if (!user) return
     setLoading(true)
     try {
-      const data = await atribuicoesService.listByDate(todayStr, user.id)
-      setAtribuicoes(data)
+      const items = await atribuicoesService.listByDate(data, user.id)
+      setAtribuicoes(items)
     } catch (err) {
-      toast.error('Erro ao carregar tarefas do dia.')
+      toast.error('Erro ao carregar suas tarefas de hoje.')
     } finally {
       setLoading(false)
     }
-  }
+  }, [data, user])
 
   useEffect(() => {
-    loadMinhasTarefas()
-  }, [user, todayStr])
+    loadData()
+  }, [loadData])
 
-  // Tempo real: novas atribuições adicionadas pelo gerente chegam na hora
-  useRealtime<AtribuicaoRecord>('atribuicoes', (e) => {
-    if (user && (e.action === 'create' || e.action === 'update' || e.action === 'delete')) {
-      loadMinhasTarefas()
-    }
-  })
+  // Tempo real
+  useRealtime('atribuicoes', loadData)
 
-  // Métricas de progresso do dia
-  const total = atribuicoes.length
-  const concluidas = atribuicoes.filter((a) => a.status === 'concluida').length
-  const porcentagem = total > 0 ? Math.round((concluidas / total) * 100) : 0
+  const agora = new Date()
 
-  // Agrupadas por processo
-  const groupedByProcesso = useMemo(() => {
-    const map = new Map<string, { nome: string; area: string; items: AtribuicaoRecord[] }>()
+  const pendentes = atribuicoes.filter((a) => a.status === 'pendente' && !estaAtrasada(a, agora))
+  const atrasadas = atribuicoes.filter((a) => a.status === 'pendente' && estaAtrasada(a, agora))
+  const concluidas = atribuicoes.filter((a) => a.status !== 'pendente')
 
-    atribuicoes.forEach((atrib) => {
-      const proc = atrib.expand?.tarefa?.expand?.processo
-      const procId = proc?.id || 'geral'
-      const procNome = proc?.nome || 'Rotina Operacional'
-      const procArea = proc?.area || 'Loja'
-
-      if (!map.has(procId)) {
-        map.set(procId, { nome: procNome, area: procArea, items: [] })
-      }
-      map.get(procId)!.items.push(atrib)
-    })
-
-    return Array.from(map.values())
-  }, [atribuicoes])
-
-  // Abrir Modal de Conclusão
-  const handleOpenCompleteModal = (atrib: AtribuicaoRecord) => {
-    setActiveTaskToComplete(atrib)
-    setObservacao(atrib.observacao || '')
-    setFotoFile(null)
-    setFotoPreview(null)
+  const abrirModal = (a: AtribuicaoRecord) => {
+    setModalAberto(a)
   }
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0]
-      setFotoFile(file)
-      setFotoPreview(URL.createObjectURL(file))
-    }
-  }
-
-  // Concluir Tarefa
-  const handleConfirmCompletion = async (skipPhoto = false) => {
-    if (!activeTaskToComplete) return
-
-    const tarefa = activeTaskToComplete.expand?.tarefa
-    if (tarefa?.evidencia_obrigatoria && !fotoFile && !skipPhoto) {
-      toast.warning('Esta tarefa exige foto de comprovação.')
-      return
-    }
-
-    setSubmitting(true)
+  const concluir = async (payload: {
+    status: 'concluida' | 'nao_aplicavel'
+    observacao?: string
+    fotoFile?: File | null
+    medicao_valor?: number
+    fora_padrao?: boolean
+  }) => {
+    if (!modalAberto) return
     try {
-      await atribuicoesService.updateStatus(activeTaskToComplete.id, {
-        status: 'concluida',
-        observacao: observacao.trim() || undefined,
-        fotoFile: skipPhoto ? null : fotoFile,
+      await atribuicoesService.updateStatus(modalAberto.id, {
+        status: payload.status,
+        observacao: payload.observacao,
+        fotoFile: payload.fotoFile,
         concluida_em: new Date().toISOString(),
+        medicao_valor: payload.medicao_valor,
+        fora_padrao: payload.fora_padrao,
       })
-
-      const completedId = activeTaskToComplete.id
-      setActiveTaskToComplete(null)
-      setCelebratedTaskId(completedId)
-      setTimeout(() => setCelebratedTaskId(null), 1500)
-
-      toast.success('Tarefa concluída com sucesso! 🧁 Parabéns!')
-      loadMinhasTarefas()
+      toast.success(
+        payload.status === 'concluida' ? 'Item concluído! 🎉' : 'Item marcado como N/A.',
+      )
+      if (payload.status === 'concluida') {
+        confetti({ particleCount: 120, spread: 70, origin: { y: 0.7 } })
+      }
+      setModalAberto(null)
+      loadData()
     } catch (err: any) {
-      toast.error(err?.data?.message || err?.message || 'Erro ao registrar conclusão.')
-    } finally {
-      setSubmitting(false)
+      toast.error(err?.message || 'Erro ao atualizar o item.')
     }
   }
 
-  // Confirmar Não se aplica
-  const handleConfirmNotApplicable = async () => {
-    if (!taskNotApplicable) return
-    setSubmitting(true)
-    try {
-      await atribuicoesService.updateStatus(taskNotApplicable.id, {
-        status: 'nao_aplicavel',
-        observacao: motivoNotApplicable.trim()
-          ? `Motivo N/A: ${motivoNotApplicable.trim()}`
-          : 'Não se aplica ao turno',
-      })
-      toast.info('Tarefa marcada como Não se aplica.')
-      setTaskNotApplicable(null)
-      setMotivoNotApplicable('')
-      loadMinhasTarefas()
-    } catch (err) {
-      toast.error('Erro ao atualizar status.')
-    } finally {
-      setSubmitting(false)
-    }
+  const formatarData = (d: string) => {
+    const [y, m, dd] = d.split('-')
+    return `${dd}/${m}/${y}`
   }
 
-  // Data por extenso
-  const dataExtenso = new Intl.DateTimeFormat('pt-BR', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-  }).format(new Date())
+  const resumo = useMemo(() => {
+    const total = atribuicoes.length
+    const feitas = concluidas.length
+    return {
+      total,
+      feitas,
+      atrasadas: atrasadas.length,
+      percentual: total === 0 ? 0 : Math.round((feitas / total) * 100),
+    }
+  }, [atribuicoes, concluidas, atrasadas])
+
+  if (loading) {
+    return (
+      <MainLayout>
+        <div className="py-12 flex justify-center">
+          <div className="w-10 h-10 border-4 border-[#E0447C] border-t-transparent rounded-full animate-spin"></div>
+        </div>
+      </MainLayout>
+    )
+  }
 
   return (
     <MainLayout>
-      <div className="max-w-xl mx-auto space-y-6">
-        {/* ================= HEADER DO DIA & BARRA DE PROGRESSO ================= */}
-        <div className="bg-white rounded-3xl p-6 border border-[#F2A65A]/20 shadow-[0_4px_16px_rgba(59,43,43,0.04)]">
-          <div className="flex items-center justify-between mb-2">
-            <div>
-              <p className="text-xs uppercase font-extrabold tracking-wider text-[#8A6F6F]">
-                {dataExtenso}
-              </p>
-              <h2 className="text-2xl font-display font-extrabold text-[#3B2B2B]">
-                Suas Tarefas de Hoje
-              </h2>
-            </div>
-            <div className="w-12 h-12 rounded-2xl bg-[#FFF3E8] flex items-center justify-center text-2xl font-bold">
-              {porcentagem === 100 ? '🎉' : '☕'}
-            </div>
-          </div>
-
-          <div className="mt-4">
-            <div className="flex justify-between items-center text-xs font-bold mb-1.5">
-              <span className="text-[#3B2B2B]">Progresso do Dia</span>
-              <span className="text-[#E0447C]">
-                {concluidas} de {total} concluídas ({porcentagem}%)
-              </span>
-            </div>
-            <div className="w-full h-3 bg-[#FFF3E8] rounded-full overflow-hidden border border-[#F2A65A]/20">
-              <div
-                className="h-full bg-gradient-to-r from-[#F2A65A] to-[#E0447C] rounded-full transition-all duration-500 ease-out"
-                style={{ width: `${porcentagem}%` }}
-              />
-            </div>
-          </div>
+      <Toaster position="top-center" />
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-display font-extrabold text-[#3B2B2B]">
+            Minhas Tarefas
+          </h1>
+          <p className="text-sm text-[#8A6F6F] mt-1">Checklist de hoje · {formatarData(data)}</p>
         </div>
+        <div className="flex items-center gap-2">
+          <Input
+            type="date"
+            value={data}
+            onChange={(e) => setData(e.target.value)}
+            className="w-40 h-10 rounded-xl bg-white border-[#F2A65A]/30 text-sm"
+          />
+        </div>
+      </div>
 
-        {/* ================= LISTA DE TAREFAS POR PROCESSO ================= */}
-        {loading ? (
-          <div className="space-y-4">
-            {[1, 2].map((i) => (
-              <div
-                key={i}
-                className="h-36 rounded-3xl bg-white animate-pulse border border-[#F2A65A]/20"
+      {/* Resumo do dia */}
+      <div className="grid grid-cols-3 gap-3 mb-6">
+        <div className="rounded-2xl bg-white border border-[#F2A65A]/20 p-4 text-center">
+          <p className="text-2xl font-display font-extrabold text-[#3B2B2B]">{resumo.feitas}</p>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-[#8A6F6F]">Feitas</p>
+        </div>
+        <div className="rounded-2xl bg-white border border-[#F2A65A]/20 p-4 text-center">
+          <p className="text-2xl font-display font-extrabold text-[#E5484D]">{resumo.atrasadas}</p>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-[#8A6F6F]">Atrasadas</p>
+        </div>
+        <div className="rounded-2xl bg-white border border-[#F2A65A]/20 p-4 text-center">
+          <p className="text-2xl font-display font-extrabold text-[#2D7A51]">
+            {resumo.percentual}%
+          </p>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-[#8A6F6F]">Concluído</p>
+        </div>
+      </div>
+
+      {/* Atrasadas */}
+      {atrasadas.length > 0 && (
+        <div className="mb-6 rounded-3xl border border-[#E5484D]/30 bg-[#FFF5F5] p-4 sm:p-5">
+          <div className="flex items-center gap-2 mb-1">
+            <AlertCircle className="w-4 h-4 text-[#E5484D]" />
+            <h2 className="text-sm font-display font-bold text-[#E5484D]">
+              Atrasadas ({atrasadas.length})
+            </h2>
+          </div>
+          <p className="text-xs text-[#8A6F6F] mb-3">
+            Passaram do horário-limite, mas ainda podem ser feitas.
+          </p>
+          <div className="space-y-2">
+            {atrasadas.map((a) => (
+              <AtribuicaoItem
+                key={a.id}
+                a={a}
+                atrasada
+                onConcluir={() => abrirModal(a)}
+                onNA={() => abrirModal(a)}
               />
             ))}
           </div>
-        ) : total === 0 ? (
-          <div className="bg-white rounded-3xl p-10 text-center border border-[#F2A65A]/20 shadow-xs">
-            <span className="text-6xl block mb-3">🧁</span>
-            <h3 className="text-xl font-display font-bold text-[#3B2B2B]">
-              Nenhuma tarefa para hoje!
-            </h3>
-            <p className="text-sm text-[#8A6F6F] mt-2 max-w-xs mx-auto leading-relaxed">
-              Tudo em ordem por enquanto. Aproveite o descanso ou aguarde a escala ser liberada! 🧁
-            </p>
+        </div>
+      )}
+
+      {/* Pendentes */}
+      <div className="mb-6">
+        <div className="flex items-center gap-2 mb-3">
+          <ClipboardList className="w-4 h-4 text-[#E0447C]" />
+          <h2 className="text-sm font-display font-bold text-[#3B2B2B]">
+            Pendentes ({pendentes.length})
+          </h2>
+        </div>
+        {pendentes.length === 0 ? (
+          <div className="text-center py-8 rounded-2xl border border-dashed border-[#F2A65A]/40 bg-[#FFF9F2]/50">
+            <CheckCircle2 className="w-8 h-8 text-[#2D7A51] mx-auto mb-2" />
+            <p className="text-sm font-semibold text-[#8A6F6F]">Nada pendente por aqui. 👏</p>
           </div>
         ) : (
-          <div className="space-y-6">
-            {groupedByProcesso.map((group, gIdx) => (
-              <div
-                key={gIdx}
-                className="bg-white rounded-3xl p-5 sm:p-6 border border-[#F2A65A]/20 shadow-xs"
-              >
-                {/* Header do Processo */}
-                <div className="flex items-center justify-between pb-3.5 mb-2 border-b border-[#F2A65A]/15">
-                  <div className="flex items-center gap-2">
-                    <AreaBadge area={group.area} size="sm" />
-                    <h3 className="font-display font-bold text-base text-[#3B2B2B]">
-                      {group.nome}
-                    </h3>
-                  </div>
-                  <span className="text-[11px] font-bold text-[#8A6F6F]">
-                    {group.items.filter((i) => i.status === 'concluida').length}/
-                    {group.items.length}
-                  </span>
-                </div>
-
-                {/* Itens do Checklist */}
-                <div className="space-y-2.5">
-                  {group.items.map((item) => {
-                    const isConcluida = item.status === 'concluida'
-                    const isNaoAplicavel = item.status === 'nao_aplicavel'
-                    const isPending = item.status === 'pendente'
-                    const isCelebrating = celebratedTaskId === item.id
-                    const tarefa = item.expand?.tarefa
-
-                    return (
-                      <div
-                        key={item.id}
-                        className={`p-3.5 rounded-2xl border transition-all relative overflow-hidden flex items-start justify-between gap-3 ${
-                          isConcluida
-                            ? 'bg-[#EDF8F1]/40 border-[#3FA372]/30'
-                            : isNaoAplicavel
-                              ? 'bg-stone-50 border-stone-200 opacity-60'
-                              : 'bg-[#FFF9F2]/60 hover:bg-[#FFF9F2] border-[#F2A65A]/30'
-                        } ${isCelebrating ? 'animate-confete-check bg-[#EDF8F1]' : ''}`}
-                      >
-                        {/* Microinteração de Confeitos Saltando */}
-                        {isCelebrating && (
-                          <div className="absolute inset-0 pointer-events-none flex items-center justify-center overflow-hidden">
-                            <span className="text-xl animate-bounce">✨</span>
-                            <span className="text-xl animate-ping">🧁</span>
-                          </div>
-                        )}
-
-                        <div className="flex items-start gap-3 min-w-0">
-                          {/* Checkbox circular grande touch ≥48px */}
-                          <button
-                            type="button"
-                            disabled={isConcluida}
-                            onClick={() => handleOpenCompleteModal(item)}
-                            className={`w-11 h-11 rounded-full flex items-center justify-center shrink-0 transition-transform active:scale-90 cursor-pointer ${
-                              isConcluida
-                                ? 'bg-[#3FA372] text-white shadow-xs'
-                                : isNaoAplicavel
-                                  ? 'bg-stone-200 text-stone-500'
-                                  : 'border-2 border-[#E0447C] bg-white text-transparent hover:border-[#C23066]'
-                            }`}
-                            aria-label={`Concluir ${tarefa?.titulo}`}
-                          >
-                            {isConcluida && <Check className="w-6 h-6 stroke-[3]" />}
-                            {isNaoAplicavel && <MinusCircle className="w-5 h-5" />}
-                          </button>
-
-                          <div
-                            onClick={() => !isConcluida && handleOpenCompleteModal(item)}
-                            className={`min-w-0 cursor-pointer ${isConcluida ? 'cursor-default' : ''}`}
-                          >
-                            <h4
-                              className={`text-sm font-bold leading-tight ${
-                                isConcluida
-                                  ? 'text-[#2D7A51] line-through'
-                                  : isNaoAplicavel
-                                    ? 'text-stone-500 line-through'
-                                    : 'text-[#3B2B2B]'
-                              }`}
-                            >
-                              {tarefa?.titulo}
-                            </h4>
-
-                            {tarefa?.descricao && (
-                              <p className="text-xs text-[#8A6F6F] mt-1 line-clamp-2">
-                                {tarefa.descricao}
-                              </p>
-                            )}
-
-                            <div className="flex items-center gap-2 mt-2 flex-wrap">
-                              {tarefa?.evidencia_obrigatoria && (
-                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-[#E0447C] bg-[#FFF3E8] px-2 py-0.5 rounded-full border border-[#E0447C]/20">
-                                  <Camera className="w-3 h-3" /> Foto Obrigatória
-                                </span>
-                              )}
-
-                              {item.observacao && (
-                                <span className="text-[10px] text-[#8A6F6F] bg-white px-2 py-0.5 rounded-md border border-[#F2A65A]/20">
-                                  "{item.observacao}"
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Menu 3 pontos para marcar "Não se aplica" */}
-                        {isPending && (
-                          <div className="shrink-0">
-                            <button
-                              type="button"
-                              onClick={() => setTaskNotApplicable(item)}
-                              className="p-1.5 rounded-lg text-[#8A6F6F] hover:text-[#3B2B2B] hover:bg-white transition cursor-pointer"
-                              title="Marcar como não se aplica"
-                            >
-                              <MoreVertical className="w-4 h-4" />
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
+          <div className="space-y-2">
+            {pendentes.map((a) => (
+              <AtribuicaoItem
+                key={a.id}
+                a={a}
+                onConcluir={() => abrirModal(a)}
+                onNA={() => abrirModal(a)}
+              />
             ))}
           </div>
         )}
       </div>
 
-      {/* ================= BOTTOM SHEET MOBILE: CONCLUIR TAREFA ================= */}
-      {activeTaskToComplete && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-end sm:items-center justify-center">
-          <div className="bg-white rounded-t-3xl sm:rounded-3xl p-6 sm:p-8 w-full max-w-lg max-h-[92vh] overflow-y-auto border-t sm:border border-[#F2A65A]/30 shadow-2xl subir-suave">
-            <div className="flex items-center justify-between pb-4 border-b border-[#F2A65A]/15 mb-4">
-              <div className="flex items-center gap-2">
-                <span className="p-2 rounded-xl bg-[#FFF3E8] text-[#E0447C]">
-                  <CheckCircle2 className="w-5 h-5" />
-                </span>
-                <h3 className="font-display font-bold text-lg text-[#3B2B2B]">
-                  Concluir Checklist
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActiveTaskToComplete(null)}
-                className="p-1 rounded-full text-[#8A6F6F] hover:bg-[#FFF3E8] transition cursor-pointer"
+      {/* Concluídas / N/A */}
+      {concluidas.length > 0 && (
+        <div className="mb-10">
+          <div className="flex items-center gap-2 mb-3">
+            <CheckCircle2 className="w-4 h-4 text-[#2D7A51]" />
+            <h2 className="text-sm font-display font-bold text-[#3B2B2B]">
+              Concluídas ({concluidas.length})
+            </h2>
+          </div>
+          <div className="space-y-2 opacity-80">
+            {concluidas.map((a) => (
+              <AtribuicaoItem key={a.id} a={a} apenasLeitura />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Modal de conclusão */}
+      {modalAberto && (
+        <ConcluirModal
+          atribuicao={modalAberto}
+          onClose={() => setModalAberto(null)}
+          onConfirm={concluir}
+        />
+      )}
+    </MainLayout>
+  )
+}
+
+/* ============ Item da lista ============ */
+
+function AtribuicaoItem({
+  a,
+  atrasada = false,
+  apenasLeitura = false,
+  onConcluir,
+  onNA,
+}: {
+  a: AtribuicaoRecord
+  atrasada?: boolean
+  apenasLeitura?: boolean
+  onConcluir?: () => void
+  onNA?: () => void
+}) {
+  const tarefa = a.expand?.tarefa
+  const processo = tarefa?.expand?.processo
+  const critica = !!tarefa?.critica
+
+  return (
+    <div
+      className={`p-4 rounded-2xl border transition ${
+        atrasada
+          ? 'bg-white border-[#E5484D]/40 shadow-[0_2px_10px_rgba(229,72,77,0.08)]'
+          : a.status === 'concluida'
+            ? 'bg-[#EDF8F1]/60 border-[#2D7A51]/20'
+            : a.status === 'nao_aplicavel'
+              ? 'bg-stone-50 border-stone-200'
+              : 'bg-white border-[#F2A65A]/25'
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap mb-1">
+            {processo && <AreaBadge area={processo.area} size="sm" />}
+            {critica && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-[#E5484D] bg-[#E5484D]/10 px-2 py-0.5 rounded-full border border-[#E5484D]/25">
+                <Zap className="w-2.5 h-2.5" /> Crítica
+              </span>
+            )}
+            {atrasada && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-white bg-[#E5484D] px-2 py-0.5 rounded-full">
+                <AlertCircle className="w-2.5 h-2.5" /> Atrasada
+              </span>
+            )}
+          </div>
+          <h4
+            className={`text-sm font-bold text-[#3B2B2B] ${a.status === 'concluida' ? 'line-through opacity-60' : ''}`}
+          >
+            {tarefa?.titulo || 'Tarefa removida'}
+          </h4>
+          <p className="text-[11px] text-[#8A6F6F] mt-0.5">
+            {processo?.nome}{' '}
+            {TIPO_LIMITE_MENCIONA(a.horario_limite) &&
+              `· ${TIPO_LIMITE_MENCIONA(a.horario_limite)}`}
+          </p>
+
+          {a.status === 'concluida' &&
+            a.medicao_valor !== undefined &&
+            a.medicao_valor !== null && (
+              <p
+                className={`text-[11px] font-semibold mt-1 ${a.fora_padrao ? 'text-[#E5484D]' : 'text-[#2D7A51]'}`}
               >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
+                <Thermometer className="w-3 h-3 inline mr-1" />
+                Medido: {a.medicao_valor}
+                {tarefa?.medicao_unidade || ''}
+                {a.fora_padrao && ' · fora do padrão'}
+              </p>
+            )}
+          {a.status === 'concluida' && a.observacao && (
+            <p className="text-[11px] text-[#8A6F6F] mt-1 italic">“{a.observacao}”</p>
+          )}
+          {a.status === 'nao_aplicavel' && (
+            <p className="text-[11px] text-stone-500 mt-1 italic">
+              N/A{a.observacao ? ` — ${a.observacao}` : ''}
+            </p>
+          )}
+        </div>
 
-            {/* Informações da Tarefa */}
-            <div className="mb-4">
-              <h4 className="text-base font-bold text-[#3B2B2B]">
-                {activeTaskToComplete.expand?.tarefa?.titulo}
-              </h4>
-              {activeTaskToComplete.expand?.tarefa?.descricao && (
-                <p className="text-xs text-[#8A6F6F] mt-1 bg-[#FFF9F2] p-3 rounded-xl border border-[#F2A65A]/20">
-                  {activeTaskToComplete.expand.tarefa.descricao}
-                </p>
-              )}
-            </div>
+        {!apenasLeitura && (
+          <div className="flex flex-col gap-1.5 shrink-0">
+            <Button
+              size="sm"
+              onClick={onConcluir}
+              className="h-8 rounded-full bg-[#E0447C] hover:bg-[#C23066] text-white text-[11px] font-bold px-3"
+            >
+              Concluir
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onNA}
+              className="h-8 rounded-full border-[#F2A65A]/40 text-[#8A6F6F] text-[11px] font-semibold px-3"
+            >
+              N/A
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
 
-            {/* Foto de Evidência */}
-            <div className="space-y-2 mb-4">
-              <div className="flex items-center justify-between">
-                <Label className="text-xs font-bold uppercase tracking-wider text-[#3B2B2B] flex items-center gap-1.5">
-                  <Camera className="w-4 h-4 text-[#E0447C]" />
-                  Foto de Evidência{' '}
-                  {activeTaskToComplete.expand?.tarefa?.evidencia_obrigatoria ? (
-                    <span className="text-[#E0447C] font-extrabold">(Obrigatória)</span>
-                  ) : (
-                    <span className="text-[#8A6F6F] font-normal">(Opcional)</span>
-                  )}
-                </Label>
-              </div>
+/* ============ Modal de conclusão ============ */
 
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                onChange={handleFileChange}
-                className="hidden"
+function ConcluirModal({
+  atribuicao,
+  onClose,
+  onConfirm,
+}: {
+  atribuicao: AtribuicaoRecord
+  onClose: () => void
+  onConfirm: (p: {
+    status: 'concluida' | 'nao_aplicavel'
+    observacao?: string
+    fotoFile?: File | null
+    medicao_valor?: number
+    fora_padrao?: boolean
+  }) => void
+}) {
+  const tarefa = atribuicao.expand?.tarefa
+  const tipo = tarefa?.tipo_registro || 'nenhum'
+  const exigeFoto = tipo === 'foto' || !!tarefa?.evidencia_obrigatoria
+  const exigeTexto = tipo === 'texto'
+  const exigeMedicao = tipo === 'medicao'
+
+  const [observacao, setObservacao] = useState('')
+  const [fotoFile, setFotoFile] = useState<File | null>(null)
+  const [fotoPreview, setFotoPreview] = useState<string | null>(null)
+  const [medicaoStr, setMedicaoStr] = useState('')
+  const [modoNA, setModoNA] = useState(false)
+  const [erro, setErro] = useState('')
+
+  const atrasada = estaAtrasada(atribuicao)
+
+  const handleFoto = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0] || null
+    setFotoFile(f)
+    setFotoPreview(f ? URL.createObjectURL(f) : null)
+  }
+
+  const submit = () => {
+    setErro('')
+
+    if (modoNA) {
+      if (!observacao.trim()) {
+        setErro('Descreva o motivo de não se aplicar.')
+        return
+      }
+      onConfirm({ status: 'nao_aplicavel', observacao: observacao.trim() })
+      return
+    }
+
+    if (exigeFoto && !fotoFile) {
+      setErro('Este item exige uma foto para ser concluído.')
+      return
+    }
+    if (exigeMedicao) {
+      if (medicaoStr.trim() === '') {
+        setErro('Informe o valor medido para concluir.')
+        return
+      }
+      const v = Number(medicaoStr.replace(',', '.'))
+      if (Number.isNaN(v)) {
+        setErro('Valor medido inválido.')
+        return
+      }
+      const alvo = tarefa?.medicao_alvo
+      const max = tarefa?.medicao_max
+      const limite = max !== undefined && max !== null ? max : alvo
+      const fora =
+        limite !== undefined && limite !== null && limite !== 0
+          ? v > limite
+          : alvo !== undefined && alvo !== null
+            ? v !== alvo
+            : false
+      onConfirm({
+        status: 'concluida',
+        medicao_valor: v,
+        fora_padrao: fora,
+        observacao: observacao.trim() || undefined,
+      })
+      return
+    }
+    if (exigeTexto && !observacao.trim()) {
+      setErro('Este item exige uma observação em texto para ser concluído.')
+      return
+    }
+    onConfirm({ status: 'concluida', observacao: observacao.trim() || undefined, fotoFile })
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full border border-[#F2A65A]/20 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+        <button
+          onClick={onClose}
+          className="absolute top-5 right-5 p-1 rounded-full text-[#8A6F6F] hover:bg-[#FFF3E8] transition cursor-pointer"
+        >
+          <X className="w-5 h-5" />
+        </button>
+
+        <h2 className="text-lg font-display font-bold text-[#3B2B2B] pr-8">
+          {modoNA ? 'Marcar como N/A' : 'Concluir Item'}
+        </h2>
+        <p className="text-xs text-[#8A6F6F] mt-1 mb-4">{tarefa?.titulo}</p>
+
+        {atrasada && (
+          <div className="mb-4 p-3 rounded-xl bg-[#FFF5F5] border border-[#E5484D]/25 text-xs text-[#E5484D] font-semibold flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            Este item está atrasado — pode ser concluído mesmo assim, e o atraso fica registrado.
+          </div>
+        )}
+
+        <div className="space-y-4">
+          {exigeMedicao && !modoNA && (
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold uppercase tracking-wider text-[#3B2B2B]">
+                Valor medido {tarefa?.medicao_unidade ? `(${tarefa.medicao_unidade})` : ''}
+                {tarefa?.medicao_alvo !== undefined && tarefa?.medicao_alvo !== null
+                  ? ` · alvo: até ${tarefa.medicao_alvo}${tarefa.medicao_unidade || ''}`
+                  : ''}
+              </Label>
+              <Input
+                type="number"
+                step="any"
+                inputMode="decimal"
+                placeholder={`Ex.: ${tarefa?.medicao_alvo ?? 0}`}
+                value={medicaoStr}
+                onChange={(e) => setMedicaoStr(e.target.value)}
+                className="h-11 rounded-xl bg-[#FFF9F2]/60 border-[#F2A65A]/30 focus-visible:ring-[#E0447C]"
               />
+            </div>
+          )}
 
+          {exigeFoto && !modoNA && (
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold uppercase tracking-wider text-[#3B2B2B]">
+                Foto de Evidência *
+              </Label>
               {fotoPreview ? (
                 <div className="relative rounded-2xl overflow-hidden border border-[#F2A65A]/30">
-                  <img src={fotoPreview} alt="Prévia" className="w-full h-44 object-cover" />
+                  <img src={fotoPreview} alt="Prévia" className="w-full h-40 object-cover" />
                   <button
                     type="button"
                     onClick={() => {
                       setFotoFile(null)
                       setFotoPreview(null)
                     }}
-                    className="absolute top-2 right-2 bg-black/60 text-white p-1 rounded-full hover:bg-black transition"
+                    className="absolute top-2 right-2 p-1.5 rounded-full bg-black/50 text-white cursor-pointer"
                   >
                     <X className="w-4 h-4" />
                   </button>
                 </div>
               ) : (
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="w-full h-28 border-2 border-dashed border-[#F2A65A]/40 rounded-2xl bg-[#FFF9F2]/50 hover:bg-[#FFF9F2] flex flex-col items-center justify-center text-[#8A6F6F] hover:text-[#E0447C] transition cursor-pointer"
-                >
-                  <Camera className="w-7 h-7 mb-1" />
-                  <span className="text-xs font-bold">Tirar foto com câmera ou anexar arquivo</span>
-                  <span className="text-[10px] text-stone-400 mt-0.5">
-                    JPG, PNG ou WebP até 5MB
+                <label className="flex flex-col items-center justify-center gap-2 h-28 rounded-2xl border-2 border-dashed border-[#F2A65A]/40 bg-[#FFF9F2]/50 cursor-pointer hover:border-[#E0447C]/50 transition">
+                  <Upload className="w-5 h-5 text-[#E0447C]" />
+                  <span className="text-xs font-semibold text-[#8A6F6F]">
+                    Tirar ou escolher foto
                   </span>
-                </button>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    onChange={handleFoto}
+                  />
+                </label>
               )}
             </div>
+          )}
 
-            {/* Campo de Observação */}
-            <div className="space-y-1.5 mb-6">
-              <Label
-                htmlFor="obs"
-                className="text-xs font-bold uppercase tracking-wider text-[#3B2B2B]"
-              >
-                Observação / Comentário (opcional)
-              </Label>
-              <Textarea
-                id="obs"
-                rows={2}
-                placeholder="Ex.: Forno estava em 175°C e foi recalibrado..."
-                value={observacao}
-                onChange={(e) => setObservacao(e.target.value)}
-                className="rounded-xl bg-[#FFF9F2]/60 border-[#F2A65A]/30 focus-visible:ring-[#E0447C] resize-none"
-              />
-            </div>
-
-            {/* Botões de Ação */}
-            <div className="flex flex-col sm:flex-row gap-2">
-              {!activeTaskToComplete.expand?.tarefa?.evidencia_obrigatoria && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => handleConfirmCompletion(true)}
-                  disabled={submitting}
-                  className="rounded-full border-stone-300 text-[#8A6F6F] hover:bg-[#FFF9F2] text-xs font-semibold py-3"
-                >
-                  Pular foto e concluir
-                </Button>
-              )}
-
-              <Button
-                type="button"
-                onClick={() => handleConfirmCompletion(false)}
-                disabled={
-                  submitting ||
-                  (activeTaskToComplete.expand?.tarefa?.evidencia_obrigatoria && !fotoFile)
-                }
-                className="flex-1 rounded-full bg-[#3FA372] hover:bg-[#34885E] text-white font-bold text-sm shadow-md py-3 cursor-pointer"
-              >
-                {submitting ? 'Salvando...' : 'Concluir Tarefa'}
-              </Button>
-            </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-bold uppercase tracking-wider text-[#3B2B2B]">
+              {exigeTexto ? 'Observação *' : 'Observação (opcional)'}
+            </Label>
+            <Textarea
+              rows={3}
+              placeholder={
+                exigeTexto
+                  ? 'Descreva o que foi verificado/registrado (obrigatório)...'
+                  : modoNA
+                    ? 'Por que este item não se aplica hoje?'
+                    : 'Alguma observação?'
+              }
+              value={observacao}
+              onChange={(e) => setObservacao(e.target.value)}
+              className="rounded-xl bg-[#FFF9F2]/60 border-[#F2A65A]/30 focus-visible:ring-[#E0447C] resize-none"
+            />
           </div>
-        </div>
-      )}
 
-      {/* ================= MODAL "NÃO SE APLICA" ================= */}
-      {taskNotApplicable && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-sm w-full border border-[#F2A65A]/20 shadow-2xl">
-            <h3 className="font-display font-bold text-lg text-[#3B2B2B]">
-              Marcar como Não se Aplica
-            </h3>
-            <p className="text-xs text-[#8A6F6F] mt-1">
-              Esta tarefa ficará com status neutro na dashboard do gerente hoje.
+          {erro && (
+            <p className="text-xs font-semibold text-[#E5484D] bg-[#FFF5F5] border border-[#E5484D]/25 rounded-xl px-3 py-2">
+              {erro}
             </p>
+          )}
 
-            <div className="mt-4 space-y-1.5">
-              <Label className="text-xs font-bold text-[#3B2B2B]">Motivo (opcional)</Label>
-              <Textarea
-                rows={2}
-                placeholder="Ex.: Loja fechada mais cedo para manutenção..."
-                value={motivoNotApplicable}
-                onChange={(e) => setMotivoNotApplicable(e.target.value)}
-                className="rounded-xl bg-[#FFF9F2]/60 border-[#F2A65A]/30 text-xs resize-none"
-              />
-            </div>
-
-            <div className="mt-6 flex items-center justify-end gap-2">
+          <div className="flex items-center justify-between pt-2">
+            <label className="flex items-center gap-2 text-xs font-semibold text-[#8A6F6F] cursor-pointer">
+              <Switch checked={modoNA} onCheckedChange={setModoNA} /> Não se aplica
+            </label>
+            <div className="flex items-center gap-2">
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
-                onClick={() => setTaskNotApplicable(null)}
-                className="rounded-full border-stone-300 text-xs font-semibold"
+                onClick={onClose}
+                className="rounded-full border-[#F2A65A]/40 text-[#3B2B2B] text-xs font-semibold"
               >
                 Cancelar
               </Button>
               <Button
                 type="button"
-                size="sm"
-                onClick={handleConfirmNotApplicable}
-                className="rounded-full bg-stone-700 hover:bg-stone-800 text-white text-xs font-bold"
+                onClick={submit}
+                className="rounded-full bg-[#E0447C] hover:bg-[#C23066] text-white text-xs font-bold px-6"
               >
-                Confirmar
+                {modoNA ? 'Marcar N/A' : 'Concluir'}
               </Button>
             </div>
           </div>
         </div>
-      )}
-    </MainLayout>
+      </div>
+    </div>
   )
 }

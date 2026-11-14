@@ -47,13 +47,20 @@ export const atribuicoesService = {
       observacao?: string
       fotoFile?: File | null
       concluida_em?: string
+      medicao_valor?: number
+      fora_padrao?: boolean
     },
   ) {
-    if (payload.fotoFile) {
+    const temAnexo = !!payload.fotoFile
+    if (temAnexo) {
       const formData = new FormData()
       formData.append('status', payload.status)
       if (payload.observacao !== undefined) formData.append('observacao', payload.observacao)
       if (payload.concluida_em) formData.append('concluida_em', payload.concluida_em)
+      if (payload.medicao_valor !== undefined)
+        formData.append('medicao_valor', String(payload.medicao_valor))
+      if (payload.fora_padrao !== undefined)
+        formData.append('fora_padrao', String(payload.fora_padrao))
       formData.append('foto', payload.fotoFile)
       return pb.collection<AtribuicaoRecord>('atribuicoes').update(id, formData)
     }
@@ -62,6 +69,8 @@ export const atribuicoesService = {
       status: payload.status,
       observacao: payload.observacao,
       concluida_em: payload.concluida_em,
+      medicao_valor: payload.medicao_valor,
+      fora_padrao: payload.fora_padrao,
     })
   },
 

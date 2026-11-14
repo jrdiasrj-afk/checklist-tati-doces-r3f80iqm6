@@ -12,6 +12,9 @@ export interface UserRecord {
 
 export type AreaProcesso = 'Cozinha' | 'Loja' | 'Caixa' | 'Limpeza' | 'Estoque'
 
+export type RecorrenciaTipo = 'nenhuma' | 'diaria' | 'dias_semana' | 'semanal'
+export type TipoRegistro = 'nenhum' | 'foto' | 'medicao' | 'texto'
+
 export interface ProcessoRecord {
   id: string
   nome: string
@@ -19,12 +22,18 @@ export interface ProcessoRecord {
   area: AreaProcesso
   ativo: boolean
   criado_por?: string
+  recorrencia?: RecorrenciaTipo
+  dias_semana?: number[] // 0=dom ... 6=sáb
+  horario_limite?: string // 'HH:mm'
+  vigencia?: string
+  designados?: string[]
   created: string
   updated: string
   // Campos expandidos
   expand?: {
     criado_por?: UserRecord
     tarefas?: TarefaRecord[]
+    designados?: UserRecord[]
   }
 }
 
@@ -36,6 +45,11 @@ export interface TarefaRecord {
   ordem: number
   evidencia_obrigatoria: boolean
   ativa: boolean
+  critica?: boolean
+  tipo_registro?: TipoRegistro
+  medicao_alvo?: number
+  medicao_max?: number
+  medicao_unidade?: string
   created: string
   updated: string
   expand?: {
@@ -58,6 +72,9 @@ export interface AtribuicaoRecord extends RecordModel {
   concluida_em?: string
   observacao?: string
   foto?: string
+  horario_limite?: string
+  medicao_valor?: number
+  fora_padrao?: boolean
   created: string
   updated: string
   expand?: {

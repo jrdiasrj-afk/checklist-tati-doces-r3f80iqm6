@@ -5,6 +5,12 @@ import { atribuicoesService } from '@/services/atribuicoes'
 import { usersService } from '@/services/users'
 import { processosService } from '@/services/processos'
 import { useRealtime } from '@/hooks/use-realtime'
+import {
+  estaAtrasada,
+  minutosAtraso,
+  indicadoresDia,
+  type Indicadores,
+} from '@/services/indicadores'
 import type { AtribuicaoRecord, UserRecord, ProcessoRecord } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -27,8 +33,49 @@ import {
   Calendar,
   X,
   FileSpreadsheet,
+  Zap,
+  Thermometer,
+  Timer,
 } from 'lucide-react'
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts'
+
+function minutosAtrasoTexto(min: number) {
+  if (min < 60) return `${min} min`
+  const h = Math.floor(min / 60)
+  const m = min % 60
+  return m > 0 ? `${h}h${m}min` : `${h}h`
+}
+
+function IndicadorCard({
+  label,
+  valor,
+  desc,
+  cor,
+  destaque = false,
+}: {
+  label: string
+  valor: string
+  desc: string
+  cor: string
+  destaque?: boolean
+}) {
+  return (
+    <div
+      className={`bg-white p-5 rounded-2xl shadow-xs flex items-center justify-between ${
+        destaque ? 'border-2 border-[#E0447C]/40' : 'border border-[#F2A65A]/20'
+      }`}
+    >
+      <div>
+        <p className="text-xs font-bold uppercase tracking-wider text-[#8A6F6F]">{label}</p>
+        <h3 className="text-3xl font-display font-extrabold mt-1" style={{ color: cor }}>
+          {valor}
+        </h3>
+        <p className="text-[11px] text-[#8A6F6F] mt-0.5">{desc}</p>
+      </div>
+      <Timer className="w-9 h-9 opacity-20 shrink-0" style={{ color: cor }} />
+    </div>
+  )
+}
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -159,6 +206,37 @@ export default function Dashboard() {
     ].filter((d) => d.value > 0)
   }, [kpis])
 
+  // Indicadores do dia (estilo Koncluí)
+  const indicadores = useMemo<Indicadores>(
+    () => indicadoresDia(atribuicoes, new Date()),
+    [atribuicoes],
+  )
+
+  // Alertas de itens críticos pendentes/atrasados, com responsável e atraso
+  const alertasCriticos = useMemo(() => {
+    const agora = new Date()
+    return atribuicoes
+      .filter((a) => a.status === 'pendente')
+      .filter((a) => !!a.expand?.tarefa?.critica || estaAtrasada(a, agora))
+      .map((a) => ({
+        a,
+        critica: !!a.expand?.tarefa?.critica,
+        atrasada: estaAtrasada(a, agora),
+        min: minutosAtraso(a, agora),
+        resp: a.expand?.colaborador?.name || a.expand?.colaborador?.email || '—',
+      }))
+      .sort((x, y) => {
+        if (x.critica !== y.critica) return x.critica ? -1 : 1
+        return y.min - x.min
+      })
+  }, [atribuicoes])
+
+  // Itens concluídos fora do padrão (medição fora do alvo)
+  const foraPadrao = useMemo(
+    () => atribuicoes.filter((a) => a.status === 'concluida' && a.fora_padrao),
+    [atribuicoes],
+  )
+
   // Agrupamento por colaborador
   const groupedByColaborador = useMemo(() => {
     const map = new Map<string, { colab: UserRecord | undefined; items: AtribuicaoRecord[] }>()
@@ -246,6 +324,95 @@ export default function Dashboard() {
         )}
       </div>
 
+      {/* ================= ALERTAS (críticos + atrasados com responsável) ================= */}
+      {alertasCriticos.length > 0 && (
+        <div className="mb-6 rounded-2xl border border-[#E5484D]/30 bg-[#FFF5F5] p-4 sm:p-5">
+          <div className="flex items-center gap-2 mb-1">
+            <AlertTriangle className="w-4 h-4 text-[#E5484D]" />
+            <h2 className="text-sm font-display font-bold text-[#E5484D]">
+              Alertas do dia ({alertasCriticos.length})
+            </h2>
+          </div>
+          <p className="text-xs text-[#8A6F6F] mb-3">
+            Itens críticos primeiro — passaram do horário-limite e ainda aguardam registro.
+          </p>
+          <div className="space-y-2">
+            {alertasCriticos.slice(0, 6).map(({ a, critica, atrasada, min, resp }) => {
+              const tarefa = a.expand?.tarefa
+              return (
+                <div
+                  key={a.id}
+                  onClick={() => setSelectedTaskDetail(a)}
+                  className="flex items-center gap-3 bg-white rounded-xl px-3 py-2.5 border border-[#E5484D]/20 cursor-pointer hover:border-[#E5484D]/50 transition"
+                >
+                  <span
+                    className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+                      critica ? 'bg-[#E5484D]/15 text-[#E5484D]' : 'bg-[#F5B841]/15 text-[#B77A0A]'
+                    }`}
+                  >
+                    {critica ? <Zap className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-bold text-[#3B2B2B] truncate">
+                      {tarefa?.titulo || 'Tarefa'}
+                      {critica && ' · crítica'}
+                    </p>
+                    <p className="text-[11px] text-[#8A6F6F] truncate">
+                      {resp}
+                      {atrasada
+                        ? ` · ${minutosAtrasoTexto(min)} após o limite`
+                        : ' · aguardando registro'}
+                      {a.expand?.tarefa?.expand?.processo?.nome
+                        ? ` · ${a.expand.tarefa.expand.processo.nome}`
+                        : ''}
+                    </p>
+                  </div>
+                  {atrasada && (
+                    <span className="text-[11px] font-bold text-[#E5484D] bg-[#E5484D]/10 px-2 py-0.5 rounded-full shrink-0">
+                      +{minutosAtrasoTexto(min)}
+                    </span>
+                  )}
+                </div>
+              )
+            })}
+            {alertasCriticos.length > 6 && (
+              <p className="text-[11px] text-[#8A6F6F] pl-1">
+                + {alertasCriticos.length - 6} outros alertas…
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ================= INDICADORES (Aplicação / Pontualidade / Esforço / Score) ================= */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <IndicadorCard
+          label="Aplicação"
+          valor={`${indicadores.aplicacao}%`}
+          desc="Concluídas + N/A"
+          cor="#2D7A51"
+        />
+        <IndicadorCard
+          label="Pontualidade"
+          valor={`${indicadores.pontualidade}%`}
+          desc="Antes do limite"
+          cor="#3B7A9C"
+        />
+        <IndicadorCard
+          label="Esforço"
+          valor={String(indicadores.esforco)}
+          desc="Itens respondidos"
+          cor="#E0447C"
+        />
+        <IndicadorCard
+          label="Score geral"
+          valor={`${indicadores.score}%`}
+          desc="Média dos indicadores"
+          cor="#E0447C"
+          destaque
+        />
+      </div>
+
       {/* ================= FAIXA DE KPIS (4 CARTÕES) ================= */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {/* Cartão 1: Concluídas Hoje */}
@@ -321,6 +488,39 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* ================= FORA DO PADRÃO (medições fora do alvo) ================= */}
+      {foraPadrao.length > 0 && (
+        <div className="mb-6 rounded-2xl border border-[#F5B841]/40 bg-[#FFFBEB] p-4 sm:p-5">
+          <div className="flex items-center gap-2 mb-2">
+            <Thermometer className="w-4 h-4 text-[#B77A0A]" />
+            <h2 className="text-sm font-display font-bold text-[#B77A0A]">
+              Fora do padrão ({foraPadrao.length})
+            </h2>
+          </div>
+          <div className="space-y-1.5">
+            {foraPadrao.map((a) => {
+              const t = a.expand?.tarefa
+              return (
+                <button
+                  key={a.id}
+                  onClick={() => setSelectedTaskDetail(a)}
+                  className="w-full flex items-center gap-2 text-left bg-white rounded-xl px-3 py-2 border border-[#F5B841]/30 hover:border-[#B77A0A]/50 transition cursor-pointer"
+                >
+                  <span className="text-xs font-bold text-[#3B2B2B] truncate flex-1">
+                    {t?.titulo}
+                  </span>
+                  <span className="text-[11px] font-bold text-[#E5484D] shrink-0">
+                    {a.medicao_valor}
+                    {t?.medicao_unidade || ''} · alvo até {t?.medicao_max ?? t?.medicao_alvo}
+                    {t?.medicao_unidade || ''}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* ================= GRID: GRÁFICO DONUT + LISTA DO DIA ================= */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -478,6 +678,8 @@ export default function Dashboard() {
                     const isConcluida = atrib.status === 'concluida'
                     const isNaoAplicavel = atrib.status === 'nao_aplicavel'
                     const isPending = atrib.status === 'pendente'
+                    const isAtrasada = isPending && estaAtrasada(atrib)
+                    const isCritica = !!atrib.expand?.tarefa?.critica
                     const isPop = recentUpdatedId === atrib.id
 
                     const tarefa = atrib.expand?.tarefa
@@ -509,11 +711,26 @@ export default function Dashboard() {
                             >
                               {tarefa?.titulo || 'Tarefa'}
                             </p>
-                            <div className="flex items-center gap-2 mt-1">
+                            <div className="flex items-center gap-2 mt-1 flex-wrap">
                               {processo?.area && <AreaBadge area={processo.area} size="sm" />}
                               <span className="text-xs text-[#8A6F6F] truncate">
                                 {processo?.nome}
                               </span>
+                              {isCritica && (
+                                <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-[#E5484D] bg-[#E5484D]/10 px-1.5 py-0.5 rounded-full">
+                                  <Zap className="w-2.5 h-2.5" /> Crítica
+                                </span>
+                              )}
+                              {isAtrasada && (
+                                <span className="text-[10px] font-bold text-[#E5484D] bg-[#E5484D]/10 px-1.5 py-0.5 rounded-full">
+                                  Atrasada
+                                </span>
+                              )}
+                              {isConcluida && atrib.fora_padrao && (
+                                <span className="text-[10px] font-bold text-[#B77A0A] bg-[#FFFBEB] px-1.5 py-0.5 rounded-full">
+                                  Fora do padrão
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -616,6 +833,22 @@ export default function Dashboard() {
                   </span>
                 </div>
               )}
+
+              {selectedTaskDetail.medicao_valor !== undefined &&
+                selectedTaskDetail.medicao_valor !== null && (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-[#8A6F6F]">Valor medido:</span>
+                    <span
+                      className={`font-bold ${
+                        selectedTaskDetail.fora_padrao ? 'text-[#E5484D]' : 'text-[#2D7A51]'
+                      }`}
+                    >
+                      {selectedTaskDetail.medicao_valor}
+                      {selectedTaskDetail.expand?.tarefa?.medicao_unidade || ''}
+                      {selectedTaskDetail.fora_padrao && ' · fora do padrão'}
+                    </span>
+                  </div>
+                )}
 
               {selectedTaskDetail.observacao && (
                 <div className="pt-2">

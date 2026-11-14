@@ -1,5 +1,5 @@
 import pb from '@/lib/pocketbase/client'
-import type { ProcessoRecord, TarefaRecord } from '@/types'
+import type { ProcessoRecord, TarefaRecord, TipoRegistro } from '@/types'
 
 export const processosService = {
   async list(filters?: { ativo?: boolean; search?: string }) {
@@ -36,13 +36,28 @@ export const processosService = {
     area: string
     ativo: boolean
     criado_por?: string
+    recorrencia?: string
+    dias_semana?: number[]
+    horario_limite?: string
+    vigencia?: string
+    designados?: string[]
   }) {
     return pb.collection<ProcessoRecord>('processos').create(data)
   },
 
   async update(
     id: string,
-    data: Partial<{ nome: string; descricao?: string; area: string; ativo: boolean }>,
+    data: Partial<{
+      nome: string
+      descricao?: string
+      area: string
+      ativo: boolean
+      recorrencia?: string
+      dias_semana?: number[]
+      horario_limite?: string
+      vigencia?: string
+      designados?: string[]
+    }>,
   ) {
     return pb.collection<ProcessoRecord>('processos').update(id, data)
   },
@@ -66,6 +81,11 @@ export const processosService = {
     ordem: number
     evidencia_obrigatoria: boolean
     ativa: boolean
+    critica?: boolean
+    tipo_registro?: TipoRegistro
+    medicao_alvo?: number
+    medicao_max?: number
+    medicao_unidade?: string
   }) {
     return pb.collection<TarefaRecord>('tarefas').create(data)
   },
@@ -78,6 +98,11 @@ export const processosService = {
       ordem: number
       evidencia_obrigatoria: boolean
       ativa: boolean
+      critica?: boolean
+      tipo_registro?: string
+      medicao_alvo?: number
+      medicao_max?: number
+      medicao_unidade?: string
     }>,
   ) {
     return pb.collection<TarefaRecord>('tarefas').update(id, data)
@@ -85,5 +110,10 @@ export const processosService = {
 
   async deleteTarefa(id: string) {
     return pb.collection('tarefas').delete(id)
+  },
+
+  /** Endpoint do cron manual (gera atribuições recorrentes de hoje) */
+  async gerarRecorrentes() {
+    return pb.send('/backend/v1/atribuicoes/gerar', { method: 'POST' })
   },
 }

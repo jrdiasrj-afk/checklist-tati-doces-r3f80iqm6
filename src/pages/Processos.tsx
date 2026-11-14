@@ -17,6 +17,16 @@ import {
 } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { toast } from 'sonner'
+import {
+  RecorrenciaForm,
+  recorrenciaDoProcesso,
+  recorrenciaInicial,
+  resumoRecorrencia,
+  type RecorrenciaState,
+} from '@/components/RecorrenciaForm'
+import { usersService } from '@/services/users'
+import type { UserRecord } from '@/types'
+import { Repeat, Users } from 'lucide-react'
 import { Plus, Search, ChevronRight, Layers, X, Sparkles } from 'lucide-react'
 
 export default function Processos() {
@@ -31,6 +41,8 @@ export default function Processos() {
   const [descricao, setDescricao] = useState('')
   const [area, setArea] = useState<AreaProcesso>('Loja')
   const [ativo, setAtivo] = useState(true)
+  const [recorrencia, setRecorrencia] = useState<RecorrenciaState>(recorrenciaInicial)
+  const [colaboradores, setColaboradores] = useState<UserRecord[]>([])
   const [saving, setSaving] = useState(false)
 
   const loadData = async () => {
@@ -47,6 +59,10 @@ export default function Processos() {
 
   useEffect(() => {
     loadData()
+    usersService
+      .list()
+      .then(setColaboradores)
+      .catch(() => {})
   }, [search])
 
   const handleToggleAtivo = async (proc: ProcessoRecord, e: React.MouseEvent) => {
@@ -76,6 +92,11 @@ export default function Processos() {
         descricao: descricao.trim(),
         area,
         ativo,
+        recorrencia: recorrencia.recorrencia,
+        dias_semana: recorrencia.recorrencia === 'dias_semana' ? recorrencia.dias_semana : [],
+        horario_limite: recorrencia.horario_limite || '',
+        vigencia: recorrencia.vigencia || '',
+        designados: recorrencia.designados,
       })
       toast.success('Processo criado com sucesso!')
       setIsModalOpen(false)
@@ -83,6 +104,7 @@ export default function Processos() {
       setDescricao('')
       setArea('Loja')
       setAtivo(true)
+      setRecorrencia(recorrenciaInicial)
       // Redireciona diretamente para cadastrar tarefas
       navigate(`/processos/${novo.id}`)
     } catch (err: any) {
@@ -185,6 +207,12 @@ export default function Processos() {
                     {proc.descricao}
                   </p>
                 )}
+                {proc.recorrencia && proc.recorrencia !== 'nenhuma' && (
+                  <p className="text-[11px] font-semibold text-[#E0447C] mt-2 flex items-center gap-1">
+                    <Repeat className="w-3 h-3" />
+                    {resumoRecorrencia(recorrenciaDoProcesso(proc))}
+                  </p>
+                )}
               </div>
 
               <div className="mt-6 pt-4 border-t border-[#F2A65A]/15 flex items-center justify-between text-xs font-semibold text-[#8A6F6F]">
@@ -285,6 +313,24 @@ export default function Processos() {
                   </p>
                 </div>
                 <Switch checked={ativo} onCheckedChange={setAtivo} />
+              </div>
+
+              {/* Recorrência (estilo Koncluí) */}
+              <div className="p-4 rounded-xl bg-[#FFF9F2] border border-[#F2A65A]/20 space-y-4">
+                <div>
+                  <p className="text-xs font-bold text-[#3B2B2B] flex items-center gap-1.5">
+                    <Repeat className="w-3.5 h-3.5 text-[#E0447C]" /> Rotina Recorrente
+                  </p>
+                  <p className="text-[11px] text-[#8A6F6F]">
+                    Com frequência e horário-limite definidos, as tarefas aparecem sozinhas no
+                    celular da equipe a cada dia.
+                  </p>
+                </div>
+                <RecorrenciaForm
+                  value={recorrencia}
+                  onChange={setRecorrencia}
+                  colaboradores={colaboradores}
+                />
               </div>
 
               <div className="pt-4 flex items-center justify-end gap-2">
