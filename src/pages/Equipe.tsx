@@ -51,7 +51,8 @@ export default function Equipe() {
   } | null>(null)
   const [savingEdit, setSavingEdit] = useState(false)
 
-  // Filtro de setor na listagem
+  // Filtros de base (local) e setor na listagem
+  const [filtroLocal, setFiltroLocal] = useState<string>('todas')
   const [filtroSetor, setFiltroSetor] = useState<string>('todos')
 
   // Modal de novo colaborador
@@ -208,12 +209,21 @@ export default function Equipe() {
     }
   }
 
-  const usersFiltrados =
-    filtroSetor === 'todos'
-      ? users
-      : filtroSetor === '__sem__'
-        ? users.filter((u) => !u.setor)
-        : users.filter((u) => (u.setor || '') === filtroSetor)
+  const usersFiltrados = users
+    .filter((u) =>
+      filtroLocal === 'todas'
+        ? true
+        : filtroLocal === '__sem__'
+          ? !u.local
+          : (u.local || '') === filtroLocal,
+    )
+    .filter((u) =>
+      filtroSetor === 'todos'
+        ? true
+        : filtroSetor === '__sem__'
+          ? !u.setor
+          : (u.setor || '') === filtroSetor,
+    )
 
   // Supervisores possíveis: gerentes do mesmo local do colaborador em edição
   const supervisoresPossiveis = editModal
@@ -253,7 +263,24 @@ export default function Equipe() {
             Gerencie local, supervisor e permissões; veja o desempenho operacional dos últimos 30
             dias de cada membro.
           </p>
-          <div className="mt-3 flex items-center gap-2">
+          <div className="mt-3 flex items-center gap-2 flex-wrap">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-[#8A6F6F]">
+              Base:
+            </span>
+            <Select value={filtroLocal} onValueChange={setFiltroLocal}>
+              <SelectTrigger className="h-8 w-48 rounded-full bg-[#FFF9F2]/60 border-[#F2A65A]/30 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todas">Todas as bases</SelectItem>
+                {LOCAIS.map((l) => (
+                  <SelectItem key={l} value={l}>
+                    {LOCAL_LABELS[l]}
+                  </SelectItem>
+                ))}
+                <SelectItem value="__sem__">Sem base</SelectItem>
+              </SelectContent>
+            </Select>
             <span className="text-[11px] font-bold uppercase tracking-wider text-[#8A6F6F]">
               Setor:
             </span>
