@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-14T23:52:21.480Z",
+  "generatedAt": "2026-11-15T00:45:54.514Z",
   "collections": [
     {
       "name": "users",
@@ -189,6 +189,30 @@
           "required": false,
           "system": false,
           "selectValues": ["fabrica", "barao", "uruguai", "meier"]
+        },
+        {
+          "name": "turno",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "sem_horario",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "setores",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "locais_extra",
+          "type": "json",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": [
