@@ -5,6 +5,7 @@ import { atribuicoesService } from '@/services/atribuicoes'
 import { usersService } from '@/services/users'
 import { alertasService } from '@/services/alertas'
 import { useRealtime } from '@/hooks/use-realtime'
+import { PremiacaoMes } from '@/components/PremiacaoMes'
 import {
   estaAtrasada,
   minutosAtraso,
@@ -734,6 +735,9 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* ================= PREMIAÇÃO DO MÊS (pódio; independe dos filtros acima) ================= */}
+      <PremiacaoMes />
 
       {/* ================= RANKING POR PONTOS + QUEM NÃO ESTÁ ACESSANDO ================= */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
