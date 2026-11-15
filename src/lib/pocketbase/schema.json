@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-15T01:02:10.130Z",
+  "generatedAt": "2026-11-15T02:04:33.585Z",
   "collections": [
     {
       "name": "users",
@@ -84,7 +84,8 @@
             "Estoque",
             "Caixa",
             "Salão/Atendimento",
-            "Recheios"
+            "Recheios",
+            "ASG"
           ]
         }
       ],
@@ -156,7 +157,7 @@
           "type": "select",
           "required": false,
           "system": false,
-          "selectValues": ["nenhuma", "diaria", "dias_semana", "semanal"]
+          "selectValues": ["nenhuma", "diaria", "dias_semana", "semanal", "quinzenal", "mensal"]
         },
         {
           "name": "dias_semana",
