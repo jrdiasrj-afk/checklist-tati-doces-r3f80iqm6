@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { MainLayout } from '@/components/MainLayout'
+import { TrocarPinCard } from '@/components/TrocarPinCard'
 import { useAuth } from '@/contexts/AuthContext'
 import { usersService } from '@/services/users'
 import pb from '@/lib/pocketbase/client'
@@ -308,6 +309,14 @@ export default function Perfil() {
             <h3 className="font-display font-bold text-lg text-[#3B2B2B]">Alterar Senha</h3>
           </div>
 
+          {/* Dica: quem entra por PIN troca o PIN na seção abaixo */}
+          {user?.email?.includes('@interno.tatidoces.com.br') && (
+            <p className="text-[11px] text-[#8A6F6F] bg-[#FFF3E8] border border-[#F2A65A]/30 rounded-xl px-3 py-2 mb-4">
+              Você entra no Tati Check com <strong>PIN numérico</strong> — use a seção{' '}
+              <strong>Alterar PIN</strong> logo abaixo para trocá-lo.
+            </p>
+          )}
+
           <form onSubmit={handleChangePassword} className="space-y-3">
             <div className="space-y-1">
               <Label className="text-xs font-bold text-[#3B2B2B]">Senha Atual</Label>
@@ -356,6 +365,9 @@ export default function Perfil() {
             </div>
           </form>
         </div>
+
+        {/* ================= ALTERAR PIN (colaborador/gerente com PIN) ================= */}
+        <TrocarPinCard onConcluido={() => {}} />
 
         {/* ================= BOTÃO SAIR ================= */}
         <div className="pt-2 pb-8">
