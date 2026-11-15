@@ -2,25 +2,15 @@ import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { MainLayout } from '@/components/MainLayout'
 import { processosService } from '@/services/processos'
-import type { ProcessoRecord, TarefaRecord, AreaProcesso, TipoRegistro, UserRecord } from '@/types'
-
-/** Evidência por tarefa: mapeia para tipo_registro ('sem_registro'/'foto'/'video') + evidencia_obrigatoria */
-type Evidencia =
-  | 'nenhuma'
-  | 'foto_obrigatoria'
-  | 'foto_opcional'
-  | 'video_obrigatorio'
-  | 'video_opcional'
-
-const evidenciaDaTarefa = (
-  t: Pick<TarefaRecord, 'tipo_registro' | 'evidencia_obrigatoria'>,
-): Evidencia => {
-  if (t.tipo_registro === 'video')
-    return t.evidencia_obrigatoria ? 'video_obrigatorio' : 'video_opcional'
-  if (t.tipo_registro === 'foto' || t.evidencia_obrigatoria)
-    return t.evidencia_obrigatoria ? 'foto_obrigatoria' : 'foto_opcional'
-  return 'nenhuma'
-}
+import { usersService } from '@/services/users'
+import type {
+  ProcessoRecord,
+  TarefaRecord,
+  TipoRegistro,
+  ConfigAdicional,
+  UserRecord,
+} from '@/types'
+import { evidenciaDaTarefa, type Evidencia } from '@/lib/evidencia'
 import { AreaBadge } from '@/components/AreaBadge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -28,29 +18,27 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import {
-  RecorrenciaForm,
-  recorrenciaDoProcesso,
-  resumoRecorrencia,
-  type RecorrenciaState,
-} from '@/components/RecorrenciaForm'
-import { usersService } from '@/services/users'
+  ChecklistCabecalhoForm,
+  cabecalhoDoProcesso,
+  configAdicionaisDoProcesso,
+  type ChecklistCabecalhoState,
+} from '@/components/ChecklistCabecalhoForm'
+import { TarefasLinhas } from '@/components/TarefasLinhas'
+import { recorrenciaDoProcesso, type RecorrenciaState } from '@/components/RecorrenciaForm'
 import { toast } from 'sonner'
 import {
   ArrowLeft,
   Plus,
-  ArrowUp,
-  ArrowDown,
   Edit2,
   Trash2,
   Camera,
   Video,
   Ruler,
+  CheckCircle,
   Type,
   Upload,
   Thermometer,
-  Repeat,
-  Zap,
-  CheckCircle,
+  ClipboardList,
   X,
   AlertTriangle,
 } from 'lucide-react'
@@ -63,7 +51,7 @@ export default function ProcessoDetalhe() {
   const [tarefas, setTarefas] = useState<TarefaRecord[]>([])
   const [loading, setLoading] = useState(true)
 
-  // Modal de Tarefa (Criar ou Editar)
+  // Modal de Tarefa (Criar ou Editar) — para tipos de registro avançados
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false)
   const [editingTask, setEditingTask] = useState<TarefaRecord | null>(null)
   const [titulo, setTitulo] = useState('')
@@ -77,10 +65,17 @@ export default function ProcessoDetalhe() {
   const [medicaoUnidade, setMedicaoUnidade] = useState('')
   const [savingTask, setSavingTask] = useState(false)
 
-  // Recorrência do processo
-  const [recorrencia, setRecorrencia] = useState<RecorrenciaState>(recorrenciaDoProcesso({}))
+  // Cabeçalho do checklist (modelo Checa Ai)
+  const [cabecalho, setCabecalho] = useState<ChecklistCabecalhoState>({
+    local: '',
+    setores: [],
+    turno: '',
+    semHorario: false,
+  })
+  const [recorrencia, setRecorrencia] = useState<RecorrenciaState | null>(null)
+  const [configAdicionais, setConfigAdicionais] = useState<ConfigAdicional[]>([])
   const [colaboradores, setColaboradores] = useState<UserRecord[]>([])
-  const [savingRecorrencia, setSavingRecorrencia] = useState(false)
+  const [savingCabecalho, setSavingCabecalho] = useState(false)
 
   // Modal de Exclusão do Processo
   const [confirmDeleteProcesso, setConfirmDeleteProcesso] = useState(false)
@@ -97,7 +92,9 @@ export default function ProcessoDetalhe() {
       ])
       setProcesso(procData)
       setTarefas(tarefasData)
+      setCabecalho(cabecalhoDoProcesso(procData))
       setRecorrencia(recorrenciaDoProcesso(procData))
+      setConfigAdicionais(configAdicionaisDoProcesso(procData))
     } catch (err) {
       toast.error('Erro ao carregar detalhes do processo.')
       navigate('/processos')
@@ -157,14 +154,13 @@ export default function ProcessoDetalhe() {
       const dadosTarefa = {
         titulo: titulo.trim(),
         descricao: descricao.trim(),
-        // As 5 opções de evidência mapeiam em tipo_registro + evidencia_obrigatoria
         evidencia_obrigatoria:
           evidencia === 'foto_obrigatoria' || evidencia === 'video_obrigatorio',
         ativa,
         critica,
-        tipo_registro: (evidencia === 'foto_obrigatoria' || evidencia === 'foto_opcional'
+        tipo_registro: (evidencia.startsWith('foto')
           ? 'foto'
-          : evidencia === 'video_obrigatorio' || evidencia === 'video_opcional'
+          : evidencia.startsWith('video')
             ? 'video'
             : tipoRegistro) as TipoRegistro,
         medicao_alvo:
@@ -194,24 +190,25 @@ export default function ProcessoDetalhe() {
     }
   }
 
-  const handleMoveOrder = async (index: number, direction: 'up' | 'down') => {
-    const targetIndex = direction === 'up' ? index - 1 : index + 1
-    if (targetIndex < 0 || targetIndex >= tarefas.length) return
-
-    const taskCurrent = tarefas[index]
-    const taskTarget = tarefas[targetIndex]
-
-    const currentOrder = taskCurrent.ordem
-    const targetOrder = taskTarget.ordem
-
+  const handleReorderTarefas = async (ordenadas: TarefaRecord[]) => {
+    setTarefas(ordenadas)
     try {
-      await Promise.all([
-        processosService.updateTarefa(taskCurrent.id, { ordem: targetOrder }),
-        processosService.updateTarefa(taskTarget.id, { ordem: currentOrder }),
-      ])
-      loadProcessoAndTarefas()
+      await Promise.all(
+        ordenadas.map((t, i) => processosService.updateTarefa(t.id, { ordem: i + 1 })),
+      )
+      toast.success('Ordem das tarefas atualizada.')
     } catch (err) {
       toast.error('Erro ao reordenar tarefas.')
+      loadProcessoAndTarefas()
+    }
+  }
+
+  const handleUpdateTarefa = async (tarefaId: string, patch: Partial<TarefaRecord>) => {
+    try {
+      await processosService.updateTarefa(tarefaId, patch)
+      setTarefas((prev) => prev.map((t) => (t.id === tarefaId ? { ...t, ...patch } : t)))
+    } catch (err) {
+      toast.error('Erro ao atualizar a tarefa.')
     }
   }
 
@@ -220,7 +217,7 @@ export default function ProcessoDetalhe() {
       await processosService.deleteTarefa(taskId)
       toast.success('Tarefa removida.')
       setDeletingTaskId(null)
-      loadProcessoAndTarefas()
+      setTarefas((prev) => prev.filter((t) => t.id !== taskId))
     } catch (err) {
       toast.error('Erro ao excluir tarefa.')
     }
@@ -234,6 +231,32 @@ export default function ProcessoDetalhe() {
       navigate('/processos')
     } catch (err) {
       toast.error('Não foi possível excluir o processo.')
+    }
+  }
+
+  const handleSalvarCabecalho = async () => {
+    if (!id || !recorrencia) return
+    setSavingCabecalho(true)
+    try {
+      await processosService.update(id, {
+        local: cabecalho.local || '',
+        setores: JSON.stringify(cabecalho.setores),
+        turno: cabecalho.turno,
+        sem_horario: cabecalho.semHorario,
+        locais_extra: JSON.stringify(configAdicionais),
+        recorrencia: recorrencia.recorrencia,
+        dias_semana: recorrencia.recorrencia === 'dias_semana' ? recorrencia.dias_semana : [],
+        horario_limite: cabecalho.semHorario ? '' : recorrencia.horario_limite || '',
+        vigencia: recorrencia.vigencia || '',
+        designados: recorrencia.designados,
+        // Manter o campo antigo `local` sincronizado para retrocompatibilidade
+      })
+      toast.success('Configuração do checklist salva!')
+      loadProcessoAndTarefas()
+    } catch (err) {
+      toast.error('Erro ao salvar a configuração do checklist.')
+    } finally {
+      setSavingCabecalho(false)
     }
   }
 
@@ -301,187 +324,57 @@ export default function ProcessoDetalhe() {
           </div>
         </div>
 
-        {/* Recorrência do processo (estilo Koncluí) */}
+        {/* Cabeçalho do checklist (modelo Checa Ai) */}
         <div className="mt-6 p-4 rounded-2xl bg-[#FFF9F2] border border-[#F2A65A]/20 space-y-4">
           <div className="flex items-center justify-between gap-2">
             <p className="text-xs font-bold text-[#3B2B2B] flex items-center gap-1.5">
-              <Repeat className="w-3.5 h-3.5 text-[#E0447C]" /> Rotina Recorrente
+              <ClipboardList className="w-3.5 h-3.5 text-[#E0447C]" /> Configuração do Checklist
             </p>
-            <span className="text-[11px] font-semibold text-[#8A6F6F]">
-              {resumoRecorrencia(recorrencia)}
-            </span>
           </div>
-          <RecorrenciaForm
-            value={recorrencia}
-            onChange={setRecorrencia}
+          <ChecklistCabecalhoForm
+            local={cabecalho.local}
+            setores={cabecalho.setores}
+            turno={cabecalho.turno}
+            semHorario={cabecalho.semHorario}
+            recorrencia={recorrencia!}
+            configAdicionais={configAdicionais}
             colaboradores={colaboradores}
+            onChange={setCabecalho}
+            onRecorrenciaChange={setRecorrencia}
+            onConfigAdicionaisChange={setConfigAdicionais}
           />
           <div className="flex items-center justify-end gap-2 pt-1">
             <Button
               type="button"
               size="sm"
-              disabled={savingRecorrencia}
-              onClick={async () => {
-                if (!id) return
-                setSavingRecorrencia(true)
-                try {
-                  await processosService.update(id, {
-                    recorrencia: recorrencia.recorrencia,
-                    dias_semana:
-                      recorrencia.recorrencia === 'dias_semana' ? recorrencia.dias_semana : [],
-                    horario_limite: recorrencia.horario_limite || '',
-                    vigencia: recorrencia.vigencia || '',
-                    designados: recorrencia.designados,
-                  })
-                  toast.success(
-                    'Rotina recorrente salva! As tarefas serão geradas automaticamente.',
-                  )
-                  loadProcessoAndTarefas()
-                } catch (err) {
-                  toast.error('Erro ao salvar a recorrência.')
-                } finally {
-                  setSavingRecorrencia(false)
-                }
-              }}
+              disabled={savingCabecalho}
+              onClick={handleSalvarCabecalho}
               className="rounded-full bg-[#E0447C] hover:bg-[#C23066] text-white text-xs font-bold px-5"
             >
-              {savingRecorrencia ? 'Salvando...' : 'Salvar Recorrência'}
+              {savingCabecalho ? 'Salvando...' : 'Salvar Configuração'}
             </Button>
           </div>
         </div>
 
-        {/* Lista de Tarefas do Checklist */}
+        {/* Tarefas do checklist (linhas no modelo Checa Ai) */}
         <div className="mt-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-display font-bold text-[#3B2B2B]">
-              Tarefas do Checklist ({tarefas.length})
+              Atividades do Checklist ({tarefas.length})
             </h2>
             <span className="text-xs text-[#8A6F6F]">
-              Ordene as tarefas conforme a sequência de execução
+              Arraste pela alça para ordenar a sequência de execução
             </span>
           </div>
 
-          {tarefas.length === 0 ? (
-            <div className="text-center py-10 bg-[#FFF9F2]/50 rounded-2xl border border-dashed border-[#F2A65A]/30">
-              <p className="text-sm font-semibold text-[#8A6F6F]">
-                Nenhuma tarefa cadastrada neste processo ainda.
-              </p>
-              <Button
-                onClick={handleOpenCreateTask}
-                variant="outline"
-                className="mt-3 rounded-full border-[#E0447C] text-[#E0447C] hover:bg-[#FFF3E8] text-xs font-bold"
-              >
-                + Adicionar Primeira Tarefa
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {tarefas.map((task, idx) => (
-                <div
-                  key={task.id}
-                  className="p-4 rounded-2xl bg-[#FFF9F2]/40 hover:bg-[#FFF9F2] border border-[#F2A65A]/20 transition flex items-center justify-between gap-4"
-                >
-                  <div className="flex items-start gap-3 min-w-0">
-                    <span className="w-7 h-7 rounded-xl bg-white border border-[#F2A65A]/30 text-[#E0447C] font-bold text-xs flex items-center justify-center shrink-0">
-                      {idx + 1}
-                    </span>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className="text-sm font-bold text-[#3B2B2B]">{task.titulo}</h4>
-                        {task.critica && (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#E5484D] bg-[#E5484D]/10 px-2 py-0.5 rounded-full border border-[#E5484D]/25">
-                            <Zap className="w-3 h-3" /> Crítica
-                          </span>
-                        )}
-                        {task.tipo_registro === 'foto' && task.evidencia_obrigatoria && (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#E0447C] bg-[#FFF3E8] px-2 py-0.5 rounded-full border border-[#E0447C]/20">
-                            <Camera className="w-3 h-3" /> Foto Obrigatória
-                          </span>
-                        )}
-                        {task.tipo_registro === 'foto' && !task.evidencia_obrigatoria && (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#2D7A51] bg-[#EDF8F1] px-2 py-0.5 rounded-full border border-[#2D7A51]/20">
-                            <Camera className="w-3 h-3" /> Foto opcional
-                          </span>
-                        )}
-                        {task.tipo_registro === 'video' && task.evidencia_obrigatoria && (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#3B7A9C] bg-[#EAF4FA] px-2 py-0.5 rounded-full border border-[#3B7A9C]/20">
-                            <Video className="w-3 h-3" /> Vídeo Obrigatório
-                          </span>
-                        )}
-                        {task.tipo_registro === 'video' && !task.evidencia_obrigatoria && (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#2D7A51] bg-[#EDF8F1] px-2 py-0.5 rounded-full border border-[#2D7A51]/20">
-                            <Video className="w-3 h-3" /> Vídeo opcional
-                          </span>
-                        )}
-                        {task.tipo_registro === 'medicao' && (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#3B7A9C] bg-[#EAF4FA] px-2 py-0.5 rounded-full border border-[#3B7A9C]/20">
-                            <Thermometer className="w-3 h-3" />
-                            Medição
-                            {task.medicao_alvo !== undefined && task.medicao_alvo !== null
-                              ? `: até ${task.medicao_alvo}${task.medicao_unidade || ''}`
-                              : ''}
-                          </span>
-                        )}
-                        {task.tipo_registro === 'texto' && (
-                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#7A5C9C] bg-[#F3ECFA] px-2 py-0.5 rounded-full border border-[#7A5C9C]/20">
-                            <Type className="w-3 h-3" /> Texto obrigatório
-                          </span>
-                        )}
-                        {!task.ativa && (
-                          <span className="text-[11px] font-semibold text-stone-500 bg-stone-100 px-2 py-0.5 rounded-full">
-                            Inativa
-                          </span>
-                        )}
-                      </div>
-                      {task.descricao && (
-                        <p className="text-xs text-[#8A6F6F] mt-1 leading-relaxed">
-                          {task.descricao}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Ações: Reordenar / Editar / Excluir */}
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button
-                      type="button"
-                      disabled={idx === 0}
-                      onClick={() => handleMoveOrder(idx, 'up')}
-                      title="Mover para cima"
-                      className="p-1.5 rounded-lg text-[#8A6F6F] hover:text-[#E0447C] hover:bg-white disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer"
-                    >
-                      <ArrowUp className="w-4 h-4" />
-                    </button>
-                    <button
-                      type="button"
-                      disabled={idx === tarefas.length - 1}
-                      onClick={() => handleMoveOrder(idx, 'down')}
-                      title="Mover para baixo"
-                      className="p-1.5 rounded-lg text-[#8A6F6F] hover:text-[#E0447C] hover:bg-white disabled:opacity-30 disabled:pointer-events-none transition cursor-pointer"
-                    >
-                      <ArrowDown className="w-4 h-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleOpenEditTask(task)}
-                      title="Editar tarefa"
-                      className="p-1.5 rounded-lg text-[#8A6F6F] hover:text-[#3B2B2B] hover:bg-white transition cursor-pointer"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setDeletingTaskId(task.id)}
-                      title="Excluir tarefa"
-                      className="p-1.5 rounded-lg text-[#8A6F6F] hover:text-[#E5484D] hover:bg-white transition cursor-pointer"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          <TarefasLinhas
+            tarefas={tarefas}
+            salvandoTarefaId={null}
+            onReorder={handleReorderTarefas}
+            onUpdate={handleUpdateTarefa}
+            onDelete={handleDeleteTask}
+            onAdd={handleOpenCreateTask}
+          />
         </div>
       </div>
 
@@ -540,7 +433,7 @@ export default function ProcessoDetalhe() {
               <div className="flex items-center justify-between p-3 rounded-xl bg-[#FFF3F3] border border-[#E5484D]/20">
                 <div>
                   <p className="text-xs font-bold text-[#3B2B2B] flex items-center gap-1.5">
-                    <Zap className="w-3.5 h-3.5 text-[#E5484D]" /> Item Crítico
+                    <AlertTriangle className="w-3.5 h-3.5 text-[#E5484D]" /> Item Crítico
                   </p>
                   <p className="text-[11px] text-[#8A6F6F]">
                     O que não pode falhar — destaque no celular e alerta na dashboard

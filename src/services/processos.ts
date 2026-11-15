@@ -54,6 +54,10 @@ export const processosService = {
       area: string
       ativo: boolean
       local?: string
+      setores?: string
+      turno?: string
+      sem_horario?: boolean
+      locais_extra?: string
       recorrencia?: string
       dias_semana?: number[]
       horario_limite?: string

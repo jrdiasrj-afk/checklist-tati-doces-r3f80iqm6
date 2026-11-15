@@ -1,7 +1,13 @@
 //
-// Cron diário que gera as atribuições do dia para processos recorrentes
-// (frequência diária / dias da semana / semanal), respeitando vigência,
-// designados e o índice único (tarefa, colaborador, data).
+// Cron diário (05h) + endpoint manual que geram as atribuições do dia para
+// processos recorrentes, no modelo Checa Ai:
+//   - cada checklist é gerado para TODOS os responsáveis designados do
+//     cabeçalho (designados) e de cada combinação extra (locais_extra);
+//   - cada combinação de unidade (local/locais_extra[].local) é etiquetada
+//     na observação da atribuição (a unidade do checklist vai junto);
+//   - sem_horario=true → atribuição SEM horário-limite (pendência do dia);
+//   - turno é meramente informativo (exibição), não restringe a geração;
+//   - o índice único (tarefa, colaborador, data) + o pré-check evitam duplicar.
 //
 // Também contém a verificação de ALERTAS (coleção `alertas`):
 //  - fora_prazo: atribuição pendente cujo horario_limite já passou (a cada 30 min)
@@ -9,13 +15,155 @@
 // O índice único (atribuicao, tipo) garante que o mesmo alerta não se duplica.
 //
 // TODO WhatsApp: quando a integração for contratada, enviar a mensagem no ponto
-// marcado com "PONTO DE ENVIO EXTERNO" abaixo (ex.: $http.send para a API do
-// WhatsApp Business usando $os.getenv('WHATSAPP_TOKEN')).
+// marcado com "PONTO DE ENVIO EXTERNO" abaixo.
 //
-// Nota JSVM: a lógica é duplicada inline em cada callback porque callbacks
-// rodam em um pool de VM separado (sem acesso a declarações top-level).
+// Nota JSVM: a lógica de geração é duplicada inline em cada callback (definida
+// DENTRO do callback) porque callbacks rodam em um pool de VM separado, sem
+// acesso a declarações top-level.
 
+// ---------------------------------------------------------------------------
+// Cron das 05h
+// ---------------------------------------------------------------------------
 cronAdd('gerar_atribuicoes_recorrentes', '0 5 * * *', () => {
+  function gerarAtribuicoesDoDia(dataStr, diaSemana) {
+    const res = { data: dataStr, criadas: 0, ignoradas: 0, processos: 0 }
+
+    const processos = $app.findRecordsByFilter(
+      'processos',
+      "ativo = true && recorrencia != 'nenhuma' && recorrencia != ''",
+      '',
+      200,
+      0,
+    )
+
+    for (const proc of processos) {
+      const recorrencia = proc.getString('recorrencia', 'nenhuma')
+      let deveRodar = false
+
+      if (recorrencia === 'diaria') {
+        deveRodar = true
+      } else if (recorrencia === 'dias_semana') {
+        const dias = proc.get('dias_semana') || []
+        deveRodar = dias.includes(diaSemana)
+      } else if (recorrencia === 'semanal') {
+        deveRodar = diaSemana === 1 // segunda-feira
+      }
+
+      if (!deveRodar) continue
+
+      // Vigência opcional: só gera se a vigência já começou
+      const vigencia = proc.getString('vigencia', '')
+      if (vigencia) {
+        const vigDate = vigencia.split(' ')[0].split('T')[0]
+        if (dataStr < vigDate) continue
+      }
+
+      const tarefas = $app.findRecordsByFilter(
+        'tarefas',
+        `processo = '${proc.id}' && ativa = true`,
+        'ordem',
+        200,
+        0,
+      )
+      if (tarefas.length === 0) continue
+
+      // --- Destinos: pares {colaborador, unidade} sem duplicar ---------------
+      // Cabeçalho: designados × (unidade principal + setores)
+      const semHorario = proc.getBool('sem_horario')
+      const limite = semHorario ? '' : proc.getString('horario_limite', '')
+      const turno = proc.getString('turno', '')
+      const unidadesCabecalho = []
+      const localPrincipal = proc.getString('local', '')
+      if (localPrincipal) unidadesCabecalho.push(localPrincipal)
+      const setoresProc = proc.get('setores') || []
+
+      const destinos = []
+      const vistos = {}
+      const addDestino = (colabId, unidade, setor) => {
+        if (!colabId) return
+        const chave = colabId + '|' + (unidade || '') + '|' + (setor || '')
+        if (vistos[chave]) return
+        vistos[chave] = true
+        destinos.push({ colabId: colabId, unidade: unidade || '', setor: setor || '' })
+      }
+
+      for (const colabId of proc.get('designados') || []) {
+        if (unidadesCabecalho.length === 0) {
+          addDestino(colabId, '', '')
+        } else {
+          for (const un of unidadesCabecalho) {
+            if (setoresProc.length === 0) {
+              addDestino(colabId, un, '')
+            } else {
+              for (const st of setoresProc) addDestino(colabId, un, st)
+            }
+          }
+        }
+      }
+
+      // Configurações adicionais (locais_extra): unidade + setor + responsáveis
+      let extras = []
+      const rawExtra = proc.get('locais_extra')
+      if (rawExtra) {
+        try {
+          extras = typeof rawExtra === 'string' ? JSON.parse(rawExtra) : rawExtra
+        } catch (_) {
+          extras = []
+        }
+        if (!Array.isArray(extras)) extras = []
+      }
+      for (const extra of extras) {
+        if (!extra || typeof extra !== 'object') continue
+        const unExtra = String(extra.local || '')
+        const stExtra = String(extra.setor || '')
+        const designadosExtra = Array.isArray(extra.designados) ? extra.designados : []
+        for (const colabId of designadosExtra) {
+          addDestino(colabId, unExtra, stExtra)
+        }
+      }
+
+      if (destinos.length === 0) continue
+      res.processos++
+
+      const atribuicoesCol = $app.findCollectionByNameOrId('atribuicoes')
+      for (const destino of destinos) {
+        for (const tarefa of tarefas) {
+          const existing = $app.findRecordsByFilter(
+            'atribuicoes',
+            `tarefa = '${tarefa.id}' && colaborador = '${destino.colabId}' && data >= '${dataStr} 00:00:00.000Z' && data <= '${dataStr} 23:59:59.999Z'`,
+            '',
+            1,
+            0,
+          )
+          if (existing.length > 0) {
+            res.ignoradas++
+            continue
+          }
+          try {
+            const rec = new Record(atribuicoesCol)
+            rec.set('tarefa', tarefa.id)
+            rec.set('colaborador', destino.colabId)
+            rec.set('data', `${dataStr} 00:00:00.000Z`)
+            rec.set('status', 'pendente')
+            if (limite) rec.set('horario_limite', limite)
+            // Etiqueta da combinação unidade+setor+turno do checklist
+            const partes = []
+            if (destino.unidade) partes.push('unidade:' + destino.unidade)
+            if (destino.setor) partes.push('setor:' + destino.setor)
+            if (turno) partes.push('turno:' + turno)
+            if (partes.length > 0) rec.set('observacao', partes.join(' | '))
+            $app.save(rec)
+            res.criadas++
+          } catch (_) {
+            res.ignoradas++
+          }
+        }
+      }
+    }
+
+    return res
+  }
+
   const hoje = new Date()
   const y = hoje.getFullYear()
   const m = String(hoje.getMonth() + 1).padStart(2, '0')
@@ -23,83 +171,7 @@ cronAdd('gerar_atribuicoes_recorrentes', '0 5 * * *', () => {
   const dataStr = `${y}-${m}-${d}`
   const diaSemana = hoje.getDay() // 0=dom ... 6=sáb
 
-  const res = { data: dataStr, processos: 0, criadas: 0, ignoradas: 0 }
-
-  const processos = $app.findRecordsByFilter(
-    'processos',
-    "ativo = true && recorrencia != 'nenhuma' && recorrencia != ''",
-    '',
-    200,
-    0,
-  )
-
-  for (const proc of processos) {
-    const recorrencia = proc.getString('recorrencia', 'nenhuma')
-    let deveRodar = false
-
-    if (recorrencia === 'diaria') {
-      deveRodar = true
-    } else if (recorrencia === 'dias_semana') {
-      const dias = proc.get('dias_semana') || []
-      deveRodar = dias.includes(diaSemana)
-    } else if (recorrencia === 'semanal') {
-      deveRodar = diaSemana === 1 // segunda-feira
-    }
-
-    if (!deveRodar) continue
-
-    // Vigência opcional: só gera se a vigência já começou
-    const vigencia = proc.getString('vigencia', '')
-    if (vigencia) {
-      const vigDate = vigencia.split(' ')[0].split('T')[0]
-      if (dataStr < vigDate) continue
-    }
-
-    const designados = proc.get('designados') || []
-    if (designados.length === 0) continue
-
-    const limite = proc.getString('horario_limite', '')
-    const tarefas = $app.findRecordsByFilter(
-      'tarefas',
-      `processo = '${proc.id}' && ativa = true`,
-      'ordem',
-      200,
-      0,
-    )
-    if (tarefas.length === 0) continue
-
-    res.processos++
-
-    const atribuicoesCol = $app.findCollectionByNameOrId('atribuicoes')
-    for (const colabId of designados) {
-      for (const tarefa of tarefas) {
-        const existing = $app.findRecordsByFilter(
-          'atribuicoes',
-          `tarefa = '${tarefa.id}' && colaborador = '${colabId}' && data >= '${dataStr} 00:00:00.000Z' && data <= '${dataStr} 23:59:59.999Z'`,
-          '',
-          1,
-          0,
-        )
-        if (existing.length > 0) {
-          res.ignoradas++
-          continue
-        }
-        try {
-          const rec = new Record(atribuicoesCol)
-          rec.set('tarefa', tarefa.id)
-          rec.set('colaborador', colabId)
-          rec.set('data', `${dataStr} 00:00:00.000Z`)
-          rec.set('status', 'pendente')
-          if (limite) rec.set('horario_limite', limite)
-          $app.save(rec)
-          res.criadas++
-        } catch (_) {
-          res.ignoradas++
-        }
-      }
-    }
-  }
-
+  const res = gerarAtribuicoesDoDia(dataStr, diaSemana)
   console.log(
     `[recorrencia] ${res.data}: ${res.criadas} atribuições criadas, ${res.ignoradas} ignoradas (${res.processos} processos recorrentes)`,
   )
@@ -112,6 +184,145 @@ routerAdd('POST', '/backend/v1/atribuicoes/gerar', (e) => {
     return e.json(403, { error: 'Acesso restrito para gerentes.' })
   }
 
+  function gerarAtribuicoesDoDia(dataStr, diaSemana) {
+    const res = { data: dataStr, criadas: 0, ignoradas: 0, processos: 0 }
+
+    const processos = $app.findRecordsByFilter(
+      'processos',
+      "ativo = true && recorrencia != 'nenhuma' && recorrencia != ''",
+      '',
+      200,
+      0,
+    )
+
+    for (const proc of processos) {
+      const recorrencia = proc.getString('recorrencia', 'nenhuma')
+      let deveRodar = false
+
+      if (recorrencia === 'diaria') {
+        deveRodar = true
+      } else if (recorrencia === 'dias_semana') {
+        const dias = proc.get('dias_semana') || []
+        deveRodar = dias.includes(diaSemana)
+      } else if (recorrencia === 'semanal') {
+        deveRodar = diaSemana === 1 // segunda-feira
+      }
+
+      if (!deveRodar) continue
+
+      // Vigência opcional: só gera se a vigência já começou
+      const vigencia = proc.getString('vigencia', '')
+      if (vigencia) {
+        const vigDate = vigencia.split(' ')[0].split('T')[0]
+        if (dataStr < vigDate) continue
+      }
+
+      const tarefas = $app.findRecordsByFilter(
+        'tarefas',
+        `processo = '${proc.id}' && ativa = true`,
+        'ordem',
+        200,
+        0,
+      )
+      if (tarefas.length === 0) continue
+
+      // --- Destinos: pares {colaborador, unidade} sem duplicar ---------------
+      // Cabeçalho: designados × (unidade principal + setores)
+      const semHorario = proc.getBool('sem_horario')
+      const limite = semHorario ? '' : proc.getString('horario_limite', '')
+      const turno = proc.getString('turno', '')
+      const unidadesCabecalho = []
+      const localPrincipal = proc.getString('local', '')
+      if (localPrincipal) unidadesCabecalho.push(localPrincipal)
+      const setoresProc = proc.get('setores') || []
+
+      const destinos = []
+      const vistos = {}
+      const addDestino = (colabId, unidade, setor) => {
+        if (!colabId) return
+        const chave = colabId + '|' + (unidade || '') + '|' + (setor || '')
+        if (vistos[chave]) return
+        vistos[chave] = true
+        destinos.push({ colabId: colabId, unidade: unidade || '', setor: setor || '' })
+      }
+
+      for (const colabId of proc.get('designados') || []) {
+        if (unidadesCabecalho.length === 0) {
+          addDestino(colabId, '', '')
+        } else {
+          for (const un of unidadesCabecalho) {
+            if (setoresProc.length === 0) {
+              addDestino(colabId, un, '')
+            } else {
+              for (const st of setoresProc) addDestino(colabId, un, st)
+            }
+          }
+        }
+      }
+
+      // Configurações adicionais (locais_extra): unidade + setor + responsáveis
+      let extras = []
+      const rawExtra = proc.get('locais_extra')
+      if (rawExtra) {
+        try {
+          extras = typeof rawExtra === 'string' ? JSON.parse(rawExtra) : rawExtra
+        } catch (_) {
+          extras = []
+        }
+        if (!Array.isArray(extras)) extras = []
+      }
+      for (const extra of extras) {
+        if (!extra || typeof extra !== 'object') continue
+        const unExtra = String(extra.local || '')
+        const stExtra = String(extra.setor || '')
+        const designadosExtra = Array.isArray(extra.designados) ? extra.designados : []
+        for (const colabId of designadosExtra) {
+          addDestino(colabId, unExtra, stExtra)
+        }
+      }
+
+      if (destinos.length === 0) continue
+      res.processos++
+
+      const atribuicoesCol = $app.findCollectionByNameOrId('atribuicoes')
+      for (const destino of destinos) {
+        for (const tarefa of tarefas) {
+          const existing = $app.findRecordsByFilter(
+            'atribuicoes',
+            `tarefa = '${tarefa.id}' && colaborador = '${destino.colabId}' && data >= '${dataStr} 00:00:00.000Z' && data <= '${dataStr} 23:59:59.999Z'`,
+            '',
+            1,
+            0,
+          )
+          if (existing.length > 0) {
+            res.ignoradas++
+            continue
+          }
+          try {
+            const rec = new Record(atribuicoesCol)
+            rec.set('tarefa', tarefa.id)
+            rec.set('colaborador', destino.colabId)
+            rec.set('data', `${dataStr} 00:00:00.000Z`)
+            rec.set('status', 'pendente')
+            if (limite) rec.set('horario_limite', limite)
+            // Etiqueta da combinação unidade+setor+turno do checklist
+            const partes = []
+            if (destino.unidade) partes.push('unidade:' + destino.unidade)
+            if (destino.setor) partes.push('setor:' + destino.setor)
+            if (turno) partes.push('turno:' + turno)
+            if (partes.length > 0) rec.set('observacao', partes.join(' | '))
+            $app.save(rec)
+            res.criadas++
+          } catch (_) {
+            res.ignoradas++
+          }
+        }
+      }
+    }
+
+    return res
+  }
+
   const hoje = new Date()
   const y = hoje.getFullYear()
   const m = String(hoje.getMonth() + 1).padStart(2, '0')
@@ -119,82 +330,7 @@ routerAdd('POST', '/backend/v1/atribuicoes/gerar', (e) => {
   const dataStr = `${y}-${m}-${d}`
   const diaSemana = hoje.getDay()
 
-  const res = { data: dataStr, processos: 0, criadas: 0, ignoradas: 0 }
-
-  const processos = $app.findRecordsByFilter(
-    'processos',
-    "ativo = true && recorrencia != 'nenhuma' && recorrencia != ''",
-    '',
-    200,
-    0,
-  )
-
-  for (const proc of processos) {
-    const recorrencia = proc.getString('recorrencia', 'nenhuma')
-    let deveRodar = false
-
-    if (recorrencia === 'diaria') {
-      deveRodar = true
-    } else if (recorrencia === 'dias_semana') {
-      const dias = proc.get('dias_semana') || []
-      deveRodar = dias.includes(diaSemana)
-    } else if (recorrencia === 'semanal') {
-      deveRodar = diaSemana === 1
-    }
-
-    if (!deveRodar) continue
-
-    const vigencia = proc.getString('vigencia', '')
-    if (vigencia) {
-      const vigDate = vigencia.split(' ')[0].split('T')[0]
-      if (dataStr < vigDate) continue
-    }
-
-    const designados = proc.get('designados') || []
-    if (designados.length === 0) continue
-
-    const limite = proc.getString('horario_limite', '')
-    const tarefas = $app.findRecordsByFilter(
-      'tarefas',
-      `processo = '${proc.id}' && ativa = true`,
-      'ordem',
-      200,
-      0,
-    )
-    if (tarefas.length === 0) continue
-
-    res.processos++
-
-    const atribuicoesCol = $app.findCollectionByNameOrId('atribuicoes')
-    for (const colabId of designados) {
-      for (const tarefa of tarefas) {
-        const existing = $app.findRecordsByFilter(
-          'atribuicoes',
-          `tarefa = '${tarefa.id}' && colaborador = '${colabId}' && data >= '${dataStr} 00:00:00.000Z' && data <= '${dataStr} 23:59:59.999Z'`,
-          '',
-          1,
-          0,
-        )
-        if (existing.length > 0) {
-          res.ignoradas++
-          continue
-        }
-        try {
-          const rec = new Record(atribuicoesCol)
-          rec.set('tarefa', tarefa.id)
-          rec.set('colaborador', colabId)
-          rec.set('data', `${dataStr} 00:00:00.000Z`)
-          rec.set('status', 'pendente')
-          if (limite) rec.set('horario_limite', limite)
-          $app.save(rec)
-          res.criadas++
-        } catch (_) {
-          res.ignoradas++
-        }
-      }
-    }
-  }
-
+  const res = gerarAtribuicoesDoDia(dataStr, diaSemana)
   console.log(
     `[recorrencia] manual: ${res.criadas} atribuições criadas, ${res.ignoradas} ignoradas (${res.processos} processos recorrentes)`,
   )

@@ -24,6 +24,13 @@ export type AreaProcesso = 'Cozinha' | 'Loja' | 'Caixa' | 'Limpeza' | 'Estoque'
 export type RecorrenciaTipo = 'nenhuma' | 'diaria' | 'dias_semana' | 'semanal'
 export type TipoRegistro = 'nenhum' | 'foto' | 'video' | 'medicao' | 'texto'
 
+/** Combinação adicional de unidade + setor + responsáveis (guardada em processos.locais_extra) */
+export interface ConfigAdicional {
+  local?: string
+  setor?: string
+  designados?: string[]
+}
+
 export interface ProcessoRecord {
   id: string
   nome: string
@@ -32,6 +39,10 @@ export interface ProcessoRecord {
   ativo: boolean
   criado_por?: string
   local?: LocalValue
+  turno?: string
+  sem_horario?: boolean
+  setores?: string[]
+  locais_extra?: ConfigAdicional[]
   recorrencia?: RecorrenciaTipo
   dias_semana?: number[] // 0=dom ... 6=sáb
   horario_limite?: string // 'HH:mm'
